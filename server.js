@@ -1,0 +1,384 @@
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
+
+const ImapService = require('./imap-service');
+const SmtpService = require('./smtp-service');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Disable browser caching for real-time frontend updates
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
+app.use(express.static(path.join(__dirname, 'public'), { etag: false, maxAge: 0 }));
+
+// Load configuration
+const CONFIG_FILE = path.join(__dirname, 'config.json');
+let appConfig = {
+  imap: {
+    host: 'h58.servidorhh.com',
+    port: 993,
+    secure: true,
+    user: 'clodoaldo.silva@itecensino.com.br',
+    password: ''
+  },
+  smtp: {
+    host: 'h58.servidorhh.com',
+    port: 465,
+    secure: true,
+    user: 'clodoaldo.silva@itecensino.com.br',
+    password: ''
+  },
+  signature: {
+    enabled: true,
+    autoNewMail: true,
+    autoReplyForward: true,
+    template: 'executive',
+    themeColor: '#0078d4',
+    fullName: 'Clodoaldo José da Silva',
+    jobTitle: 'Direção / Coordenação',
+    company: 'ITEC Ensino - Volta Redonda',
+    phone: '',
+    email: 'clodoaldo.silva@itecensino.com.br',
+    website: 'www.itecensino.com.br',
+    logoDataUrl: '',
+    html: '<div style="font-family: \'Segoe UI\', Tahoma, sans-serif; font-size: 13px; color: #323130; border-left: 3px solid #0078d4; padding-left: 12px; margin-top: 12px;"><div style="font-size: 15px; font-weight: 700; color: #0078d4;">Clodoaldo José da Silva</div><div style="font-size: 12px; font-weight: 600; color: #605e5c;">Direção / Coordenação | ITEC Ensino - Volta Redonda</div><div style="margin-top: 4px; font-size: 12px; color: #323130;">✉️ <a href="mailto:clodoaldo.silva@itecensino.com.br" style="color: #0078d4; text-decoration: none;">clodoaldo.silva@itecensino.com.br</a> &nbsp;|&nbsp; 🌐 www.itecensino.com.br</div></div>'
+  },
+  savedEmails: ['clodoaldo.silva@itecensino.com.br'],
+  signaturesByUser: {},
+  demoModeIfDisconnected: true
+};
+
+if (fs.existsSync(CONFIG_FILE)) {
+  try {
+    const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    appConfig = {
+      ...appConfig,
+      ...parsed,
+      imap: { ...appConfig.imap, ...(parsed.imap || {}) },
+      smtp: { ...appConfig.smtp, ...(parsed.smtp || {}) },
+      signature: { ...appConfig.signature, ...(parsed.signature || {}) },
+      savedEmails: Array.isArray(parsed.savedEmails) && parsed.savedEmails.length > 0
+        ? parsed.savedEmails
+        : [parsed.imap?.user || 'clodoaldo.silva@itecensino.com.br'].filter(Boolean),
+      signaturesByUser: parsed.signaturesByUser || {}
+    };
+  } catch (e) {
+    console.error('Erro ao carregar config.json:', e);
+  }
+}
+
+const imapService = new ImapService(appConfig);
+const smtpService = new SmtpService(appConfig);
+
+// API Endpoints
+
+// Login & Switch User Account
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const password = req.body.password || '';
+    const rememberEmail = req.body.rememberEmail !== false;
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Por favor, informe o e-mail e a senha.' });
+    }
+
+    const tempConfig = {
+      ...appConfig,
+      imap: {
+        ...appConfig.imap,
+        user: email,
+        password: password
+      }
+    };
+
+    const testService = new ImapService(tempConfig);
+    const testResult = await testService.testConnection();
+
+    if (!testResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: testResult.message || 'Falha na autenticação. Verifique seu e-mail e senha.'
+      });
+    }
+
+    // Update active credentials
+    appConfig.imap.user = email;
+    appConfig.imap.password = password;
+    appConfig.smtp.user = email;
+    appConfig.smtp.password = password;
+
+    // Save email to savedEmails list
+    if (!Array.isArray(appConfig.savedEmails)) {
+      appConfig.savedEmails = [];
+    }
+    if (rememberEmail) {
+      appConfig.savedEmails = [email, ...appConfig.savedEmails.filter(e => e.toLowerCase() !== email)];
+    }
+
+    // Load user-specific signature if available, or adapt default
+    appConfig.signaturesByUser = appConfig.signaturesByUser || {};
+    if (appConfig.signaturesByUser[email]) {
+      appConfig.signature = appConfig.signaturesByUser[email];
+    } else if (email !== 'clodoaldo.silva@itecensino.com.br') {
+      const namePart = email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      appConfig.signature = {
+        ...appConfig.signature,
+        fullName: namePart,
+        email: email,
+        html: `<div style="font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; color: #323130; border-left: 3px solid #0078d4; padding-left: 12px; margin-top: 12px;"><div style="font-size: 15px; font-weight: 700; color: #0078d4;">${namePart}</div><div style="font-size: 12px; font-weight: 600; color: #605e5c;">ITEC Ensino - Volta Redonda</div><div style="margin-top: 4px; font-size: 12px; color: #323130;">✉️ <a href="mailto:${email}" style="color: #0078d4; text-decoration: none;">${email}</a> &nbsp;|&nbsp; 🌐 www.itecensino.com.br</div></div>`
+      };
+      appConfig.signaturesByUser[email] = appConfig.signature;
+    }
+
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2), 'utf-8');
+    imapService.updateConfig(appConfig);
+    smtpService.updateConfig(appConfig);
+
+    res.json({
+      success: true,
+      user: email,
+      savedEmails: appConfig.savedEmails,
+      signature: appConfig.signature
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Erro ao autenticar: ' + err.message });
+  }
+});
+
+// Remove a saved email from list
+app.delete('/api/auth/saved-email', (req, res) => {
+  try {
+    const emailToRemove = (req.query.email || '').trim().toLowerCase();
+    appConfig.savedEmails = (appConfig.savedEmails || []).filter(e => e.toLowerCase() !== emailToRemove);
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2), 'utf-8');
+    res.json({ success: true, savedEmails: appConfig.savedEmails });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get config
+app.get('/api/config', (req, res) => {
+  res.json({
+    imap: {
+      host: appConfig.imap.host,
+      port: appConfig.imap.port,
+      secure: appConfig.imap.secure,
+      user: appConfig.imap.user,
+      hasPassword: !!appConfig.imap.password
+    },
+    smtp: {
+      host: appConfig.smtp.host,
+      port: appConfig.smtp.port,
+      secure: appConfig.smtp.secure,
+      user: appConfig.smtp.user,
+      hasPassword: !!appConfig.smtp.password
+    },
+    signature: appConfig.signature,
+    savedEmails: appConfig.savedEmails || []
+  });
+});
+
+// Save config
+app.post('/api/config', (req, res) => {
+  try {
+    const { imap, smtp, signature } = req.body;
+    if (imap) {
+      appConfig.imap = {
+        ...appConfig.imap,
+        ...imap,
+        password: imap.password !== undefined && imap.password !== '' ? imap.password : appConfig.imap.password
+      };
+    }
+    if (smtp) {
+      appConfig.smtp = {
+        ...appConfig.smtp,
+        ...smtp,
+        password: smtp.password !== undefined && smtp.password !== '' ? smtp.password : appConfig.smtp.password
+      };
+    }
+    if (signature) {
+      appConfig.signature = {
+        ...appConfig.signature,
+        ...signature
+      };
+      if (appConfig.imap.user) {
+        appConfig.signaturesByUser = appConfig.signaturesByUser || {};
+        appConfig.signaturesByUser[appConfig.imap.user.toLowerCase()] = appConfig.signature;
+      }
+    }
+
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2), 'utf-8');
+    imapService.updateConfig(appConfig);
+    smtpService.updateConfig(appConfig);
+
+    res.json({ success: true, message: 'Configurações salvas com sucesso!', signature: appConfig.signature });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Test IMAP Connection
+app.post('/api/imap/test', async (req, res) => {
+  if (req.body && req.body.imap) {
+    const tempConfig = {
+      ...appConfig,
+      imap: {
+        ...appConfig.imap,
+        ...req.body.imap
+      }
+    };
+    const testService = new ImapService(tempConfig);
+    const result = await testService.testConnection();
+    return res.json(result);
+  }
+  const result = await imapService.testConnection();
+  res.json(result);
+});
+
+// Test SMTP Connection
+app.post('/api/smtp/test', async (req, res) => {
+  if (req.body && req.body.smtp) {
+    const tempConfig = {
+      ...appConfig,
+      smtp: {
+        ...appConfig.smtp,
+        ...req.body.smtp
+      }
+    };
+    const result = await smtpService.testConnection(tempConfig);
+    return res.json(result);
+  }
+  const result = await smtpService.testConnection();
+  res.json(result);
+});
+
+// Get folders
+app.get('/api/imap/folders', async (req, res) => {
+  try {
+    const folders = await imapService.getFolders();
+    res.json({ success: true, folders });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get messages in folder
+app.get('/api/imap/messages', async (req, res) => {
+  try {
+    const folder = req.query.folder || 'INBOX';
+    const filter = req.query.filter || 'all';
+    const search = req.query.search || '';
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 50;
+
+    const result = await imapService.getMessages(folder, { search, filter, page, limit });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get single message detail
+app.get('/api/imap/message/:uid', async (req, res) => {
+  try {
+    const folder = req.query.folder || 'INBOX';
+    const uid = req.params.uid;
+    console.log(`[API /api/imap/message] Buscando mensagem UID: ${uid} (pasta: ${folder})`);
+    const message = await imapService.getMessageDetail(folder, uid);
+    if (!message) {
+      console.warn(`[API /api/imap/message] Mensagem UID: ${uid} não encontrada`);
+      return res.status(404).json({ success: false, error: 'Mensagem não encontrada' });
+    }
+    res.json({ success: true, message });
+  } catch (err) {
+    console.error(`[API /api/imap/message] Erro ao buscar mensagem:`, err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update flags (seen, flagged)
+app.post('/api/imap/flags', async (req, res) => {
+  try {
+    const { folder = 'INBOX', uid, seen, flagged } = req.body;
+    const result = await imapService.setFlags(folder, uid, { seen, flagged });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Move message
+app.post('/api/imap/move', async (req, res) => {
+  try {
+    const { fromFolder = 'INBOX', toFolder, uid } = req.body;
+    const result = await imapService.moveMessage(fromFolder, toFolder, uid);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete message
+app.delete('/api/imap/message/:uid', async (req, res) => {
+  try {
+    const folder = req.query.folder || 'INBOX';
+    const uid = req.params.uid;
+    const result = await imapService.deleteMessage(folder, uid);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Send message via SMTP
+app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
+  try {
+    const { to, cc, bcc, subject, text, html } = req.body;
+    const attachments = req.files || [];
+
+    const result = await smtpService.sendMail({
+      to,
+      cc,
+      bcc,
+      subject,
+      text,
+      html,
+      attachments
+    });
+
+    if (result.success && imapService.hasCredentials()) {
+      imapService.appendSentMessage({ to, cc, subject, text, html }).catch(() => {});
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`=======================================================`);
+  console.log(` Sistema IMAP Outlook Webmail rodando na porta ${PORT} `);
+  console.log(` Acesse: http://localhost:${PORT}                      `);
+  console.log(` Servidor IMAP Alvo: ${appConfig.imap.host}:993 (SSL) `);
+  console.log(` Usuário: ${appConfig.imap.user}                        `);
+  console.log(`=======================================================`);
+});
+

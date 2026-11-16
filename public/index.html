@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook Webmail - Protocolo IMAP</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar (Outlook Header) -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="waffle-btn" title="Iniciador de aplicativos">
+        <i class="fa-solid fa-grip-dots"></i>
+      </button>
+      <div class="brand">
+        <!-- Microsoft Outlook Logo -->
+        <svg class="brand-icon" viewBox="0 0 24 24">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0078d4"/>
+          <path d="M14 2v6h6" fill="#2b88d8"/>
+          <path d="M7 13.5A2.5 2.5 0 0 1 9.5 11h5a2.5 2.5 0 0 1 2.5 2.5v5a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 7 18.5v-5z" fill="#ffffff" opacity="0.3"/>
+          <circle cx="12" cy="15" r="3" fill="#ffffff"/>
+        </svg>
+        <span>Outlook</span>
+      </div>
+    </div>
+
+    <div class="topbar-center">
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass search-icon-left"></i>
+        <input type="search" id="searchInput" name="outlook_search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="" placeholder="Pesquisar mensagens, remetentes ou assuntos (Ctrl+E)">
+        <i class="fa-solid fa-xmark" id="btnClearSearch" style="display: none; position: absolute; right: 32px; color: #605e5c; cursor: pointer; font-size: 13px;" title="Limpar pesquisa"></i>
+        <i class="fa-solid fa-sliders search-icon-right" title="Filtros avançados de busca"></i>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <span id="activeUserEmailLabel" style="font-size: 12px; color: rgba(255,255,255,0.9); margin-right: 4px;">clodoaldo.silva@itecensino.com.br</span>
+      <button class="topbar-btn" id="btnSwitchAccount" title="Trocar de usuário / Sair">
+        <i class="fa-solid fa-right-from-bracket"></i>
+        <span>Trocar Conta</span>
+      </button>
+      <div class="user-avatar-btn" id="userAvatar" title="clodoaldo.silva@itecensino.com.br">
+        CS
+      </div>
+    </div>
+  </header>
+
+  <!-- Ribbon Action Bar -->
+  <div class="ribbon">
+    <button class="btn-new-mail" id="btnNewEmail">
+      <i class="fa-solid fa-pen-to-square"></i>
+      <span>Novo email</span>
+    </button>
+    <div class="ribbon-divider"></div>
+    <button class="ribbon-btn" id="btnRibbonDelete" disabled title="Excluir email selecionado">
+      <i class="fa-regular fa-trash-can"></i>
+      <span>Excluir</span>
+    </button>
+    <button class="ribbon-btn" id="btnRibbonToggleRead" disabled title="Marcar como lido/não lido">
+      <i class="fa-regular fa-envelope"></i>
+      <span>Marcar como não lido</span>
+    </button>
+    <button class="ribbon-btn" id="btnRibbonFlag" disabled title="Sinalizar email">
+      <i class="fa-regular fa-flag"></i>
+      <span>Sinalizar</span>
+    </button>
+    <button class="ribbon-btn" id="btnRibbonMove" disabled title="Mover para pasta">
+      <i class="fa-regular fa-folder-open"></i>
+      <span>Mover para</span>
+    </button>
+    <div class="ribbon-divider"></div>
+    <button class="ribbon-btn" id="btnRibbonRefresh" title="Sincronizar emails do servidor IMAP">
+      <i class="fa-solid fa-rotate-right"></i>
+      <span>Atualizar</span>
+    </button>
+  </div>
+
+  <!-- Main 3-Column Outlook Layout -->
+  <div class="main-layout">
+    
+    <!-- Left App Rail -->
+    <aside class="app-rail">
+      <div class="rail-top">
+        <button class="rail-item active" title="Email">
+          <i class="fa-regular fa-envelope"></i>
+        </button>
+        <button class="rail-item" title="Calendário">
+          <i class="fa-regular fa-calendar"></i>
+        </button>
+        <button class="rail-item" title="Pessoas / Contatos">
+          <i class="fa-regular fa-address-book"></i>
+        </button>
+        <button class="rail-item" title="Tarefas / To Do">
+          <i class="fa-regular fa-circle-check"></i>
+        </button>
+      </div>
+      <div class="rail-bottom">
+        <button class="rail-item" id="railSettingsBtn" title="Configurações">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Folders Navigation Pane -->
+    <nav class="folders-pane">
+      <div class="folder-section">
+        <div class="folder-section-title">
+          <span>Favoritos</span>
+          <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
+        </div>
+        <div id="favoritesList">
+          <div class="folder-item active" data-folder="INBOX">
+            <div class="folder-left">
+              <i class="fa-solid fa-inbox folder-icon"></i>
+              <span>Caixa de entrada</span>
+            </div>
+            <span class="folder-badge" id="badgeInboxCount">2</span>
+          </div>
+          <div class="folder-item" data-folder="Sent">
+            <div class="folder-left">
+              <i class="fa-regular fa-paper-plane folder-icon"></i>
+              <span>Itens Enviados</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="folder-section">
+        <div class="folder-section-title">
+          <span>Pastas</span>
+          <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
+        </div>
+        <div id="foldersList">
+          <!-- Dynamically populated from IMAP server -->
+        </div>
+      </div>
+    </nav>
+
+    <!-- Middle Email List Pane -->
+    <section class="message-list-pane">
+      <div class="message-list-header">
+        <div class="folder-title-row">
+          <h2 class="current-folder-title" id="currentFolderTitle">Caixa de entrada</h2>
+          <span style="font-size: 12px; color: var(--text-secondary);" id="messageCountLabel">Carregando...</span>
+        </div>
+        <div class="filter-tabs">
+          <button class="filter-tab active" data-filter="all">Todos</button>
+          <button class="filter-tab" data-filter="unread">Não lidos</button>
+          <button class="filter-tab" data-filter="flagged">Sinalizados</button>
+          <button class="filter-tab" data-filter="attachments">Com anexo</button>
+        </div>
+      </div>
+
+      <div class="message-list-scroll" id="messageListScroll">
+        <!-- Message cards rendered here -->
+      </div>
+    </section>
+
+    <!-- Right Reading / Email Preview Pane -->
+    <main class="reading-pane" id="readingPane">
+      
+      <!-- Placeholder when no email is selected -->
+      <div class="no-selection" id="noSelectionView">
+        <i class="fa-regular fa-envelope-open no-selection-icon"></i>
+        <h3>Selecione um item para ler</h3>
+        <p>Nada selecionado no momento</p>
+      </div>
+
+      <!-- Detail view when email is selected -->
+      <div class="reading-content" id="readingContentView" style="display: none;">
+        <div class="reading-actionbar">
+          <div class="actionbar-left">
+            <button class="action-btn primary" id="btnReply">
+              <i class="fa-solid fa-reply"></i>
+              <span>Responder</span>
+            </button>
+            <button class="action-btn" id="btnReplyAll">
+              <i class="fa-solid fa-reply-all"></i>
+              <span>Responder a todos</span>
+            </button>
+            <button class="action-btn" id="btnForward">
+              <i class="fa-solid fa-share"></i>
+              <span>Encaminhar</span>
+            </button>
+          </div>
+          <div>
+            <button class="action-btn" id="btnDeleteCurrent" title="Excluir">
+              <i class="fa-regular fa-trash-can"></i>
+            </button>
+            <button class="action-btn" id="btnToggleReadCurrent" title="Marcar como lido/não lido">
+              <i class="fa-regular fa-envelope"></i>
+            </button>
+            <button class="action-btn" id="btnFlagCurrent" title="Sinalizar">
+              <i class="fa-regular fa-flag"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="reading-header">
+          <h1 class="reading-subject" id="readSubject">Assunto do Email</h1>
+          <div class="reading-meta">
+            <div class="sender-avatar" id="readSenderAvatar">DH</div>
+            <div class="meta-details">
+              <div class="sender-row">
+                <span class="sender-name" id="readSenderName">Daniele Henriques</span>
+                <span class="email-timestamp" id="readDate">Qui 12/11/2026 13:58</span>
+              </div>
+              <div class="sender-email-address" id="readSenderEmail">&lt;daniele.henriques@itecensino.com.br&gt;</div>
+              <div class="recipients-row" id="readRecipients">
+                <strong>Para:</strong> <span id="readTo">clodoaldo.silva@itecensino.com.br</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attachments bar -->
+        <div class="attachments-bar" id="attachmentsBar" style="display: none;">
+          <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+            <i class="fa-solid fa-paperclip"></i> Anexos:
+          </span>
+          <div id="attachmentsChips" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+        </div>
+
+        <!-- Email Body HTML / Text -->
+        <div class="reading-body" id="readBody">
+          <!-- Rendered message body -->
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Floating Outlook Compose Modal -->
+  <div class="compose-modal" id="composeModal" style="display: none;">
+    <div class="compose-header">
+      <span class="compose-title" id="composeModalTitle">Nova mensagem</span>
+      <div class="compose-window-actions">
+        <button class="window-btn" id="btnMinimizeCompose" title="Minimizar"><i class="fa-solid fa-minus"></i></button>
+        <button class="window-btn" id="btnCloseCompose" title="Fechar e descartar"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+
+    <form class="compose-form" id="composeForm">
+      <div class="input-row">
+        <span class="input-label">Para:</span>
+        <input type="email" class="input-field" id="composeTo" placeholder="Destinatários separados por vírgula" required>
+      </div>
+      <div class="input-row">
+        <span class="input-label">Cc:</span>
+        <input type="email" class="input-field" id="composeCc" placeholder="Com cópia">
+      </div>
+      <div class="input-row">
+        <span class="input-label">Assunto:</span>
+        <input type="text" class="input-field" id="composeSubject" placeholder="Adicionar um assunto" required>
+      </div>
+
+      <!-- Formatting Toolbar -->
+      <div class="compose-toolbar">
+        <button type="button" class="format-btn" onclick="document.execCommand('bold', false, null)" title="Negrito (Ctrl+B)"><b>N</b></button>
+        <button type="button" class="format-btn" onclick="document.execCommand('italic', false, null)" title="Itálico (Ctrl+I)"><i>I</i></button>
+        <button type="button" class="format-btn" onclick="document.execCommand('underline', false, null)" title="Sublinhado (Ctrl+U)"><u>S</u></button>
+        <div class="ribbon-divider" style="height: 18px;"></div>
+        <button type="button" class="format-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista com marcadores"><i class="fa-solid fa-list-ul"></i></button>
+        <button type="button" class="format-btn" onclick="document.execCommand('insertOrderedList', false, null)" title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
+        <div class="ribbon-divider" style="height: 18px;"></div>
+        <label class="format-btn" style="cursor: pointer;" title="Anexar arquivos">
+          <i class="fa-solid fa-paperclip"></i> Anexar
+          <input type="file" id="composeFileInput" multiple style="display: none;">
+        </label>
+        <button type="button" class="format-btn" id="btnInsertSignatureNow" title="Inserir assinatura no corpo do e-mail">
+          <i class="fa-solid fa-signature" style="color: var(--ms-blue);"></i> Assinatura
+        </button>
+        <button type="button" class="format-btn" id="btnOpenSigFromCompose" title="Editar/Criar Assinatura em Configurações">
+          <i class="fa-solid fa-pen-nib"></i>
+        </button>
+        <span id="composeAttachedFilesCount" style="font-size: 11px; color: var(--ms-blue); margin-left: 6px;"></span>
+      </div>
+
+      <!-- Rich Body Content Editable -->
+      <div class="compose-editor" id="composeEditor" contenteditable="true" placeholder="Escreva sua mensagem aqui..."></div>
+      
+      <div class="compose-footer">
+        <div style="display: flex; gap: 8px;">
+          <button type="submit" class="btn-new-mail" id="btnSendMail">
+            <i class="fa-regular fa-paper-plane"></i>
+            <span>Enviar</span>
+          </button>
+          <button type="button" class="ribbon-btn" id="btnDiscardMail">Descartar</button>
+        </div>
+        <span style="font-size: 11px; color: var(--text-secondary);" id="composeStatusMsg"></span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Settings & Signature Creator Modal -->
+  <div class="modal-overlay" id="settingsModal" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-gear" style="color: var(--ms-blue); margin-right: 8px;"></i>Configurações do Outlook Webmail</h3>
+        <button class="window-btn" id="btnCloseSettings"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <!-- Settings Navigation Tabs -->
+      <div class="settings-tabs">
+        <button type="button" class="settings-tab active" data-tab="tabServer" id="tabBtnServer">
+          <i class="fa-solid fa-server"></i>
+          <span>Servidor IMAP & SMTP</span>
+        </button>
+        <button type="button" class="settings-tab" data-tab="tabSignature" id="tabBtnSignature">
+          <i class="fa-solid fa-signature"></i>
+          <span>Criador de Assinaturas</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- TAB 1: IMAP & SMTP Server Settings -->
+        <div class="settings-tab-pane active" id="tabServer">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; background: #faf9f8; padding: 10px 14px; border-radius: 6px; border: 1px solid #edebe9;">
+            <span style="font-size: 13px; color: var(--text-secondary);">
+              Configure a conexão com seu servidor de email (ex: ServidorHH / Roundcube).
+            </span>
+            <div id="imapStatusBadge" class="imap-badge connected" title="Status da Conexão IMAP">
+              <span class="imap-dot"></span>
+              <span id="imapStatusText">IMAP: Conectado</span>
+            </div>
+          </div>
+
+          <h4 style="font-size: 14px; margin-bottom: 8px; color: var(--ms-blue);"><i class="fa-regular fa-envelope"></i> Servidor de Entrada (IMAP)</h4>
+          
+          <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+              <label>Servidor IMAP (Host):</label>
+              <input type="text" class="form-control" id="cfgImapHost" value="h58.servidorhh.com" placeholder="ex: h58.servidorhh.com">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Porta:</label>
+              <input type="number" class="form-control" id="cfgImapPort" value="993">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Email / Usuário:</label>
+            <input type="email" class="form-control" id="cfgImapUser" autocomplete="off" value="clodoaldo.silva@itecensino.com.br" placeholder="seu-email@itecensino.com.br">
+          </div>
+
+          <div class="form-group">
+            <label>Senha do Email:</label>
+            <div style="position: relative; display: flex; align-items: center;">
+              <input type="password" class="form-control" id="cfgImapPass" autocomplete="new-password" placeholder="Digite sua senha do Webmail Roundcube" style="padding-right: 36px;">
+              <button type="button" id="btnTogglePassVisibility" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;" title="Mostrar/Ocultar senha">
+                <i class="fa-regular fa-eye" id="passEyeIcon"></i>
+              </button>
+            </div>
+            <span style="font-size: 11px; color: var(--text-secondary);">Digite a mesma senha utilizada para acessar o webmail no link https://h58.servidorhh.com/roundcube/</span>
+          </div>
+
+          <div class="form-group" style="margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="cfgImapSsl" checked> Usar SSL/TLS (Recomendado na porta 993)
+            </label>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid var(--border-color); margin: 16px 0;">
+
+          <h4 style="font-size: 14px; margin-bottom: 8px; color: var(--ms-blue);"><i class="fa-regular fa-paper-plane"></i> Servidor de Saída (SMTP)</h4>
+
+          <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+              <label>Servidor SMTP (Host):</label>
+              <input type="text" class="form-control" id="cfgSmtpHost" value="h58.servidorhh.com">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Porta SMTP:</label>
+              <input type="number" class="form-control" id="cfgSmtpPort" value="465">
+            </div>
+          </div>
+          <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: -6px; margin-bottom: 10px;">
+            <i class="fa-solid fa-circle-check" style="color: #107c41;"></i> Porta 465 (SSL) para ServidorHH com fallback automático para porta 587.
+          </span>
+
+          <div id="testResultBox" class="test-result-box"></div>
+        </div>
+
+        <!-- TAB 2: Signature Builder Studio -->
+        <div class="settings-tab-pane" id="tabSignature">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h4 style="font-size: 14px; color: var(--ms-blue); margin-bottom: 2px;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Criador de Assinatura de E-mail
+              </h4>
+              <span style="font-size: 12px; color: var(--text-secondary);">
+                Crie sua assinatura profissional usando o gerador rápido ou personalize livremente no editor visual.
+              </span>
+            </div>
+          </div>
+
+          <!-- Quick Generator Assistant -->
+          <div class="sig-generator-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.4px;">
+                1. Escolha um Estilo e Preencha seus Dados
+              </span>
+              <div class="sig-color-swatches">
+                <span style="font-size: 11px; color: var(--text-secondary);">Cor:</span>
+                <button type="button" class="sig-color-dot active" data-color="#0078d4" style="background: #0078d4;" title="Azul Outlook"></button>
+                <button type="button" class="sig-color-dot" data-color="#004578" style="background: #004578;" title="Azul Marinho Executivo"></button>
+                <button type="button" class="sig-color-dot" data-color="#107c41" style="background: #107c41;" title="Verde Corporativo"></button>
+                <button type="button" class="sig-color-dot" data-color="#a4262c" style="background: #a4262c;" title="Bordô"></button>
+                <button type="button" class="sig-color-dot" data-color="#323130" style="background: #323130;" title="Grafite"></button>
+                <input type="color" id="sigCustomColor" value="#0078d4" style="width: 22px; height: 22px; border: none; padding: 0; background: none; cursor: pointer;" title="Cor personalizada">
+              </div>
+            </div>
+
+            <!-- Template Selector -->
+            <div class="sig-template-selector">
+              <div class="sig-template-card active" data-template="executive">
+                <i class="fa-solid fa-grip-lines-vertical"></i>
+                <span>Executivo Moderno</span>
+              </div>
+              <div class="sig-template-card" data-template="corporate">
+                <i class="fa-solid fa-id-card"></i>
+                <span>Cartão com Logo/Avatar</span>
+              </div>
+              <div class="sig-template-card" data-template="minimal">
+                <i class="fa-solid fa-align-left"></i>
+                <span>Clássico Minimalista</span>
+              </div>
+            </div>
+
+            <!-- Generator Fields -->
+            <div class="form-row">
+              <div class="form-group" style="flex: 1; margin-bottom: 8px;">
+                <label>Nome Completo:</label>
+                <input type="text" class="form-control" id="sigFullName" value="Clodoaldo José da Silva" placeholder="Ex: Clodoaldo José da Silva">
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 8px;">
+                <label>Cargo / Função:</label>
+                <input type="text" class="form-control" id="sigJobTitle" value="Direção / Coordenação" placeholder="Ex: Diretor / Coordenador">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 1; margin-bottom: 8px;">
+                <label>Empresa / Unidade:</label>
+                <input type="text" class="form-control" id="sigCompany" value="ITEC Ensino - Volta Redonda" placeholder="Ex: ITEC - Volta Redonda">
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 8px;">
+                <label>Telefone / WhatsApp:</label>
+                <input type="text" class="form-control" id="sigPhone" value="" placeholder="Ex: (24) 99999-9999">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 1; margin-bottom: 8px;">
+                <label>E-mail de Contato:</label>
+                <input type="text" class="form-control" id="sigEmail" value="clodoaldo.silva@itecensino.com.br" placeholder="clodoaldo.silva@itecensino.com.br">
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 8px;">
+                <label>Site / Endereço:</label>
+                <input type="text" class="form-control" id="sigWebsite" value="www.itecensino.com.br" placeholder="Ex: www.itecensino.com.br">
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px solid #e1dfdd;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label class="action-btn" style="cursor: pointer; margin: 0;">
+                  <i class="fa-regular fa-image" style="color: var(--ms-blue);"></i>
+                  <span>Carregar Logo/Foto</span>
+                  <input type="file" id="sigLogoUpload" accept="image/*" style="display: none;">
+                </label>
+                <button type="button" class="action-btn" id="btnRemoveSigLogo" style="display: none; color: #a80000;">
+                  <i class="fa-solid fa-trash-can"></i> Remover Logo
+                </button>
+                <span id="sigLogoStatus" style="font-size: 11px; color: var(--text-secondary);"></span>
+              </div>
+
+              <button type="button" class="action-btn primary" id="btnGenerateSignature">
+                <i class="fa-solid fa-bolt"></i>
+                <span>Atualizar Modelo no Editor</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Rich Visual Editor -->
+          <div style="margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.4px;">
+                2. Editor Visual e Pré-visualização (Editável)
+              </span>
+              <span style="font-size: 11px; color: var(--text-secondary);">Você pode digitar ou formatar diretamente abaixo</span>
+            </div>
+
+            <div class="sig-editor-wrapper">
+              <div class="sig-toolbar">
+                <button type="button" class="format-btn" data-sig-cmd="bold" title="Negrito"><b>N</b></button>
+                <button type="button" class="format-btn" data-sig-cmd="italic" title="Itálico"><i>I</i></button>
+                <button type="button" class="format-btn" data-sig-cmd="underline" title="Sublinhado"><u>S</u></button>
+                <div class="ribbon-divider" style="height: 16px;"></div>
+                <button type="button" class="format-btn" data-sig-cmd="justifyLeft" title="Alinhar à esquerda"><i class="fa-solid fa-align-left"></i></button>
+                <button type="button" class="format-btn" data-sig-cmd="justifyCenter" title="Centralizar"><i class="fa-solid fa-align-center"></i></button>
+                <button type="button" class="format-btn" data-sig-cmd="justifyRight" title="Alinhar à direita"><i class="fa-solid fa-align-right"></i></button>
+                <div class="ribbon-divider" style="height: 16px;"></div>
+                <label class="format-btn" style="display: flex; align-items: center; gap: 4px; cursor: pointer;" title="Cor do texto selecionado">
+                  <i class="fa-solid fa-palette"></i>
+                  <input type="color" id="sigTextColorPicker" value="#0078d4" style="width: 16px; height: 16px; border: none; padding: 0; background: none; cursor: pointer;">
+                </label>
+                <label class="format-btn" style="cursor: pointer;" title="Inserir imagem no cursor">
+                  <i class="fa-regular fa-image"></i> Imagem
+                  <input type="file" id="sigInlineImageInput" accept="image/*" style="display: none;">
+                </label>
+                <button type="button" class="format-btn" id="btnSigClear" title="Limpar assinatura" style="margin-left: auto; color: #a80000;">
+                  <i class="fa-solid fa-eraser"></i> Limpar
+                </button>
+              </div>
+              <div class="sig-editor" id="sigEditor" contenteditable="true"></div>
+            </div>
+          </div>
+
+          <!-- Automatic Insertion Settings -->
+          <div style="background: #f3f2f1; padding: 10px 14px; border-radius: 6px; display: flex; flex-direction: column; gap: 6px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
+              <input type="checkbox" id="sigAutoNewMail" checked>
+              Incluir assinatura automaticamente em novos e-mails que eu redigir
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
+              <input type="checkbox" id="sigAutoReplyForward" checked>
+              Incluir assinatura automaticamente nas mensagens que eu responder ou encaminhar
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="action-btn" id="btnTestImap">
+          <i class="fa-solid fa-plug"></i>
+          <span>Testar Conexão</span>
+        </button>
+        <div style="display: flex; gap: 8px; margin-left: auto;">
+          <button type="button" class="action-btn" id="btnCancelSettings">Cancelar</button>
+          <button type="button" class="action-btn primary" id="btnSaveSettings">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span>Salvar Alterações</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Startup Multi-User Login Screen (Microsoft 365 Style) -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-card">
+      <div class="login-brand">
+        <svg width="32" height="32" viewBox="0 0 24 24">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0078d4"/>
+          <path d="M14 2v6h6" fill="#2b88d8"/>
+          <circle cx="12" cy="15" r="3" fill="#ffffff"/>
+        </svg>
+        <div>
+          <div class="login-brand-title">Outlook Webmail</div>
+          <div class="login-brand-subtitle">Servidor IMAP/SMTP • ITEC Ensino</div>
+        </div>
+      </div>
+
+      <h2 class="login-heading">Entrar na sua conta</h2>
+      <p class="login-desc">Selecione seu e-mail gravado ou digite um novo endereço para acessar suas mensagens.</p>
+
+      <!-- Saved Email Accounts List -->
+      <div id="savedEmailsSection" style="display: none; margin-bottom: 14px;">
+        <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 6px;">
+          Contas salvas neste computador:
+        </span>
+        <div id="savedEmailsList" class="saved-emails-list"></div>
+      </div>
+
+      <form id="loginForm" autocomplete="on">
+        <div class="form-group">
+          <label for="loginEmailInput">Endereço de E-mail:</label>
+          <input type="email" class="form-control" id="loginEmailInput" list="savedEmailsDatalist" placeholder="nome@itecensino.com.br" required autocomplete="username">
+          <datalist id="savedEmailsDatalist"></datalist>
+        </div>
+
+        <div class="form-group">
+          <label for="loginPasswordInput">Senha do Webmail:</label>
+          <div style="position: relative; display: flex; align-items: center;">
+            <input type="password" class="form-control" id="loginPasswordInput" placeholder="Digite sua senha de acesso" required autocomplete="current-password" style="padding-right: 36px;">
+            <button type="button" id="btnToggleLoginPass" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;" title="Mostrar/Ocultar senha">
+              <i class="fa-regular fa-eye" id="loginPassEyeIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 8px; margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; color: var(--text-primary);">
+            <input type="checkbox" id="loginRememberEmail" checked>
+            Deixar meu e-mail gravado para não precisar digitar novamente
+          </label>
+        </div>
+
+        <div id="loginErrorBox" class="test-result-box error" style="display: none; margin-bottom: 14px;"></div>
+
+        <button type="submit" class="btn-login-submit" id="btnLoginSubmit">
+          <i class="fa-solid fa-right-to-bracket"></i>
+          <span>Entrar no Webmail</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toastNotification">
+    <i class="fa-solid fa-circle-info"></i>
+    <span id="toastMessage">Operação realizada com sucesso!</span>
+  </div>
+
+  <script src="app.js?v=2.3.0"></script>
+</body>
+</html>
+
