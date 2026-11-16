@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const multer = require('multer');
 
@@ -25,8 +26,24 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public'), { etag: false, maxAge: 0 }));
 
-// Load configuration
+// Load configuration (supports both local disk and Vercel read-only /tmp environment)
 const CONFIG_FILE = path.join(__dirname, 'config.json');
+const TMP_CONFIG_FILE = path.join(os.tmpdir(), 'outlook_webmail_config.json');
+
+function saveConfigSafe(cfg) {
+  const jsonStr = JSON.stringify(cfg, null, 2);
+  try {
+    fs.writeFileSync(CONFIG_FILE, jsonStr, 'utf-8');
+  } catch (err) {
+    // On Vercel / Serverless, /var/task is read-only (EROFS). Save to /tmp instead!
+    try {
+      fs.writeFileSync(TMP_CONFIG_FILE, jsonStr, 'utf-8');
+    } catch (tmpErr) {
+      console.warn('[Config] Ambiente somente-leitura, mantendo configurações em memória:', tmpErr.message);
+    }
+  }
+}
+
 let appConfig = {
   imap: {
     host: 'h58.servidorhh.com',
@@ -62,28 +79,52 @@ let appConfig = {
   demoModeIfDisconnected: true
 };
 
-if (fs.existsSync(CONFIG_FILE)) {
-  try {
-    const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    appConfig = {
-      ...appConfig,
-      ...parsed,
-      imap: { ...appConfig.imap, ...(parsed.imap || {}) },
-      smtp: { ...appConfig.smtp, ...(parsed.smtp || {}) },
-      signature: { ...appConfig.signature, ...(parsed.signature || {}) },
-      savedEmails: Array.isArray(parsed.savedEmails) && parsed.savedEmails.length > 0
-        ? parsed.savedEmails
-        : [parsed.imap?.user || 'clodoaldo.silva@itecensino.com.br'].filter(Boolean),
-      signaturesByUser: parsed.signaturesByUser || {}
-    };
-  } catch (e) {
-    console.error('Erro ao carregar config.json:', e);
+// Load from /tmp (if running on Vercel warm instance) or local config.json
+[CONFIG_FILE, TMP_CONFIG_FILE].forEach(file => {
+  if (fs.existsSync(file)) {
+    try {
+      const raw = fs.readFileSync(file, 'utf-8');
+      const parsed = JSON.parse(raw);
+      appConfig = {
+        ...appConfig,
+        ...parsed,
+        imap: { ...appConfig.imap, ...(parsed.imap || {}) },
+        smtp: { ...appConfig.smtp, ...(parsed.smtp || {}) },
+        signature: { ...appConfig.signature, ...(parsed.signature || {}) },
+        savedEmails: Array.isArray(parsed.savedEmails) && parsed.savedEmails.length > 0
+          ? parsed.savedEmails
+          : [parsed.imap?.user || 'clodoaldo.silva@itecensino.com.br'].filter(Boolean),
+        signaturesByUser: { ...(appConfig.signaturesByUser || {}), ...(parsed.signaturesByUser || {}) }
+      };
+    } catch (e) {
+      console.error(`Erro ao carregar ${file}:`, e.message);
+    }
   }
-}
+});
 
 const imapService = new ImapService(appConfig);
 const smtpService = new SmtpService(appConfig);
+
+// Stateless Session Middleware for Vercel Serverless (restores user credentials across Lambda instances)
+app.use((req, res, next) => {
+  const hdrUser = req.headers['x-imap-user'];
+  const hdrPassB64 = req.headers['x-imap-pass'];
+  if (hdrUser && hdrPassB64) {
+    try {
+      const decodedPass = Buffer.from(String(hdrPassB64), 'base64').toString('utf8');
+      const cleanUser = String(hdrUser).trim().toLowerCase();
+      if (cleanUser && decodedPass && (appConfig.imap.user !== cleanUser || appConfig.imap.password !== decodedPass)) {
+        appConfig.imap.user = cleanUser;
+        appConfig.imap.password = decodedPass;
+        appConfig.smtp.user = cleanUser;
+        appConfig.smtp.password = decodedPass;
+        imapService.updateConfig(appConfig);
+        smtpService.updateConfig(appConfig);
+      }
+    } catch (e) {}
+  }
+  next();
+});
 
 // API Endpoints
 
@@ -146,7 +187,7 @@ app.post('/api/auth/login', async (req, res) => {
       appConfig.signaturesByUser[email] = appConfig.signature;
     }
 
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2), 'utf-8');
+    saveConfigSafe(appConfig);
     imapService.updateConfig(appConfig);
     smtpService.updateConfig(appConfig);
 
@@ -166,7 +207,7 @@ app.delete('/api/auth/saved-email', (req, res) => {
   try {
     const emailToRemove = (req.query.email || '').trim().toLowerCase();
     appConfig.savedEmails = (appConfig.savedEmails || []).filter(e => e.toLowerCase() !== emailToRemove);
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2), 'utf-8');
+    saveConfigSafe(appConfig);
     res.json({ success: true, savedEmails: appConfig.savedEmails });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -224,7 +265,7 @@ app.post('/api/config', (req, res) => {
       }
     }
 
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(appConfig, null, 2), 'utf-8');
+    saveConfigSafe(appConfig);
     imapService.updateConfig(appConfig);
     smtpService.updateConfig(appConfig);
 
@@ -373,12 +414,16 @@ app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(` Sistema IMAP Outlook Webmail rodando na porta ${PORT} `);
-  console.log(` Acesse: http://localhost:${PORT}                      `);
-  console.log(` Servidor IMAP Alvo: ${appConfig.imap.host}:993 (SSL) `);
-  console.log(` Usuário: ${appConfig.imap.user}                        `);
-  console.log(`=======================================================`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`=======================================================`);
+    console.log(` Sistema IMAP Outlook Webmail rodando na porta ${PORT} `);
+    console.log(` Acesse: http://localhost:${PORT}                      `);
+    console.log(` Servidor IMAP Alvo: ${appConfig.imap.host}:993 (SSL) `);
+    console.log(` Usuário: ${appConfig.imap.user}                        `);
+    console.log(`=======================================================`);
+  });
+}
+
+module.exports = app;
 

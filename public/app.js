@@ -2,6 +2,23 @@
 (function () {
   'use strict';
 
+  // Intercept fetch to attach active session credentials on Vercel Serverless
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = function (input, init = {}) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    if (url.startsWith('/api/')) {
+      const sUser = sessionStorage.getItem('outlook_session_user');
+      const sPass = sessionStorage.getItem('outlook_session_pass_b64');
+      if (sUser && sPass) {
+        const headers = new Headers(init.headers || {});
+        if (!headers.has('x-imap-user')) headers.set('x-imap-user', sUser);
+        if (!headers.has('x-imap-pass')) headers.set('x-imap-pass', sPass);
+        init.headers = headers;
+      }
+    }
+    return originalFetch(input, init);
+  };
+
   // State
   let currentFolder = 'INBOX';
   let currentFilter = 'all';
@@ -256,13 +273,21 @@
 
       if (data.success) {
         sessionStorage.setItem('outlook_session_auth', 'true');
+        sessionStorage.setItem('outlook_session_user', email);
+        try {
+          sessionStorage.setItem('outlook_session_pass_b64', btoa(unescape(encodeURIComponent(password))));
+        } catch (e) {}
+
         if (rememberEmail) {
           localStorage.setItem('outlook_last_email', email);
           savedEmails = getMergedSavedEmails([email, ...(data.savedEmails || []), ...savedEmails]);
           saveEmailsLocally(savedEmails);
         }
 
-        if (data.signature) {
+        const localSig = localStorage.getItem('outlook_sig_' + email);
+        if (localSig) {
+          try { sigState = { ...sigState, ...JSON.parse(localSig) }; } catch (e) {}
+        } else if (data.signature) {
           sigState = { ...sigState, ...data.signature };
         }
 
@@ -1039,6 +1064,13 @@
       if (data.signature) {
         sigState = { ...sigState, ...data.signature };
       }
+      const activeEmail = (data.imap?.user || sessionStorage.getItem('outlook_session_user') || '').toLowerCase();
+      if (activeEmail) {
+        const localSig = localStorage.getItem('outlook_sig_' + activeEmail);
+        if (localSig) {
+          try { sigState = { ...sigState, ...JSON.parse(localSig) }; } catch (e) {}
+        }
+      }
       savedEmails = getMergedSavedEmails(data.savedEmails || (data.imap?.user ? [data.imap.user] : []));
       saveEmailsLocally(savedEmails);
       populateSignatureBuilderUI();
@@ -1052,6 +1084,13 @@
     const elSigEditor = document.getElementById('sigEditor');
     if (elSigEditor) {
       sigState.html = elSigEditor.innerHTML;
+    }
+
+    const activeUser = (document.getElementById('cfgImapUser')?.value || sessionStorage.getItem('outlook_session_user') || '').trim().toLowerCase();
+    if (activeUser) {
+      try {
+        localStorage.setItem('outlook_sig_' + activeUser, JSON.stringify(sigState));
+      } catch (e) {}
     }
 
     const configData = {
