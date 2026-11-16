@@ -1501,7 +1501,44 @@
     elBtnSaveSettings.onclick = handleSaveSettings;
     elBtnTestImap.onclick = handleTestImap;
 
-    // Toggle password eye icon
+    // Login Screen & Multi-User Account Switching
+    if (elLoginForm) {
+      elLoginForm.onsubmit = handleLoginSubmit;
+    }
+
+    if (elLoginEmailInput) {
+      elLoginEmailInput.oninput = () => renderSavedEmails();
+    }
+
+    const triggerAccountSwitch = () => {
+      sessionStorage.removeItem('outlook_session_auth');
+      showLoginScreen();
+    };
+
+    if (elBtnSwitchAccount) {
+      elBtnSwitchAccount.onclick = triggerAccountSwitch;
+    }
+
+    const elUserAvatar = document.getElementById('userAvatar');
+    if (elUserAvatar) {
+      elUserAvatar.onclick = triggerAccountSwitch;
+    }
+
+    const btnToggleLoginPass = document.getElementById('btnToggleLoginPass');
+    const loginPassEyeIcon = document.getElementById('loginPassEyeIcon');
+    if (btnToggleLoginPass && elLoginPasswordInput && loginPassEyeIcon) {
+      btnToggleLoginPass.onclick = () => {
+        if (elLoginPasswordInput.type === 'password') {
+          elLoginPasswordInput.type = 'text';
+          loginPassEyeIcon.className = 'fa-regular fa-eye-slash';
+        } else {
+          elLoginPasswordInput.type = 'password';
+          loginPassEyeIcon.className = 'fa-regular fa-eye';
+        }
+      };
+    }
+
+    // Toggle password eye icon in Settings
     const btnTogglePassVisibility = document.getElementById('btnTogglePassVisibility');
     const cfgImapPass = document.getElementById('cfgImapPass');
     const passEyeIcon = document.getElementById('passEyeIcon');

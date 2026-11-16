@@ -28,5 +28,9 @@
     "logoDataUrl": "",
     "html": "<br><br><br><table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; color: #323130; margin-top: 12px; border-collapse: collapse;\">\n        <tbody><tr>\n          <td style=\"padding-right: 14px; vertical-align: middle;\">\n            <div style=\"width: 52px; height: 52px; border-radius: 50%; background: #0078d4; color: #ffffff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 52px;\">CS</div>\n          </td>\n          <td style=\"border-left: 3px solid #0078d4; padding-left: 14px; vertical-align: middle;\">\n            <div style=\"font-size: 15px; font-weight: 700; color: #0078d4; line-height: 1.2;\">Clodoaldo José da Silva</div>\n            <div style=\"font-size: 12px; font-weight: 600; color: #605e5c; margin-top: 2px;\">Coordenação • ITEC Ensino - Volta Redonda</div>\n            <div style=\"font-size: 12px; color: #323130; margin-top: 6px;\"><span>📞 (24) 99949-2580</span> &nbsp;|&nbsp; <span>✉️ <a href=\"mailto:clodoaldo.silva@itecensino.com.br\" style=\"color: #0078d4; text-decoration: none;\">clodoaldo.silva@itecensino.com.br</a></span> &nbsp;|&nbsp; <span>🌐 <a href=\"https://www.itecensino.com.br\" target=\"_blank\" style=\"color: #0078d4; text-decoration: none;\">www.itecensino.com.br</a></span></div>\n          </td>\n        </tr>\n      </tbody></table>"
   },
+  "savedEmails": [
+    "clodoaldo.silva@itecensino.com.br"
+  ],
+  "signaturesByUser": {},
   "demoModeIfDisconnected": true
 }
