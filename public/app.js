@@ -25,6 +25,7 @@
   let currentSearch = '';
   let messages = [];
   let selectedMessage = null;
+  let selectedUids = new Set();
   let folders = [];
   let attachedFiles = [];
 
@@ -122,9 +123,43 @@
   const elBtnSwitchAccount = document.getElementById('btnSwitchAccount');
 
   let savedEmails = [];
+  let readingPaneLayout = localStorage.getItem('outlook_reading_pane_layout') || 'right';
+
+  function applyReadingPaneLayout(mode) {
+    readingPaneLayout = (mode === 'bottom') ? 'bottom' : 'right';
+    try {
+      localStorage.setItem('outlook_reading_pane_layout', readingPaneLayout);
+    } catch (e) {}
+
+    const elContentSplit = document.getElementById('contentSplit');
+    if (elContentSplit) {
+      if (readingPaneLayout === 'bottom') {
+        elContentSplit.classList.add('layout-bottom');
+      } else {
+        elContentSplit.classList.remove('layout-bottom');
+      }
+    }
+
+    const optRight = document.getElementById('optLayoutRight');
+    const optBottom = document.getElementById('optLayoutBottom');
+    if (optRight && optBottom) {
+      if (readingPaneLayout === 'bottom') {
+        optBottom.classList.add('active');
+        optRight.classList.remove('active');
+      } else {
+        optRight.classList.add('active');
+        optBottom.classList.remove('active');
+      }
+    }
+
+    if (messages.length > 0) {
+      renderMessageList();
+    }
+  }
 
   // Initialize
   async function init() {
+    applyReadingPaneLayout(readingPaneLayout);
     if (elSearchInput) {
       elSearchInput.value = '';
       currentSearch = '';
@@ -429,6 +464,7 @@
     currentFolder = path;
     elCurrentFolderTitle.textContent = name || path;
     selectedMessage = null;
+    selectedUids.clear();
 
     // Reset reading view
     const noSel = document.getElementById('noSelectionView');
@@ -447,6 +483,8 @@
 
   // Load Messages
   async function loadMessages() {
+    selectedUids.clear();
+    updateRibbonState();
     elMessageListScroll.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-spinner fa-spin"></i> Carregando emails...</div>';
     
     try {
@@ -469,6 +507,36 @@
     }
   }
 
+  function syncSelectionUI() {
+    const count = selectedUids.size;
+    const badge = document.getElementById('selectedCountBadge');
+    if (badge) {
+      if (count > 0) {
+        badge.textContent = `${count} selecionado${count > 1 ? 's' : ''}`;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    const allChecked = messages.length > 0 && messages.every(m => selectedUids.has(String(m.uid)));
+    const chkTop = document.getElementById('chkSelectAllMessages');
+    const chkCols = document.getElementById('chkSelectAllCols');
+    if (chkTop) chkTop.checked = allChecked;
+    if (chkCols) chkCols.checked = allChecked;
+
+    document.querySelectorAll('.message-card').forEach(c => {
+      const uid = c.getAttribute('data-uid');
+      const isChecked = selectedUids.has(String(uid));
+      if (isChecked) c.classList.add('checked-row');
+      else c.classList.remove('checked-row');
+      const chk = c.querySelector('.msg-select-chk');
+      if (chk) chk.checked = isChecked;
+    });
+
+    updateRibbonState();
+  }
+
   function renderMessageList() {
     if (messages.length === 0) {
       elMessageListScroll.innerHTML = `
@@ -477,67 +545,124 @@
           <p>Nenhuma mensagem nesta pasta.</p>
         </div>
       `;
+      syncSelectionUI();
       return;
     }
+
+    const isSentOrDraft = currentFolder.toLowerCase().includes('sent') || 
+                          currentFolder.toLowerCase().includes('enviad') || 
+                          currentFolder.toLowerCase().includes('draft') || 
+                          currentFolder.toLowerCase().includes('rascunh');
+
+    const elColHdrSender = document.getElementById('colHdrSender');
+    if (elColHdrSender) {
+      elColHdrSender.textContent = isSentOrDraft ? 'Para / E-mail' : 'De / E-mail';
+    }
+
+    const isBottomLayout = readingPaneLayout === 'bottom';
 
     elMessageListScroll.innerHTML = '';
     messages.forEach(msg => {
       const card = document.createElement('div');
-      const isSelected = selectedMessage && String(selectedMessage.uid) === String(msg.uid);
-      card.className = `message-card ${!msg.seen ? 'unread' : ''} ${isSelected ? 'selected' : ''}`;
-      card.setAttribute('data-uid', String(msg.uid));
+      const uidStr = String(msg.uid);
+      const isSelected = selectedMessage && String(selectedMessage.uid) === uidStr;
+      const isChecked = selectedUids.has(uidStr);
+      card.className = `message-card ${!msg.seen ? 'unread' : ''} ${isSelected ? 'selected' : ''} ${isChecked ? 'checked-row' : ''}`;
+      card.setAttribute('data-uid', uidStr);
       card.style.cursor = 'pointer';
 
       // Direct click handler on the card
       card.onclick = (e) => {
-        if (e.target.closest('.card-action-btn')) return;
+        if (e.target.closest('.card-action-btn') || e.target.closest('.msg-select-chk')) return;
         selectMessage(msg);
       };
       
-      const isSentOrDraft = currentFolder.toLowerCase().includes('sent') || 
-                            currentFolder.toLowerCase().includes('enviad') || 
-                            currentFolder.toLowerCase().includes('draft') || 
-                            currentFolder.toLowerCase().includes('rascunh');
-      
       let displayName = '';
+      let displayEmail = '';
       if (isSentOrDraft) {
         if (Array.isArray(msg.to) && msg.to.length > 0) {
-          displayName = 'Para: ' + msg.to.map(t => t.name || t.address).filter(Boolean).join(', ');
+          displayName = msg.to.map(t => t.name || t.address).filter(Boolean).join(', ');
+          displayEmail = msg.to[0]?.address || '';
         } else {
-          displayName = 'Para: (Sem destinatário)';
+          displayName = '(Sem destinatário)';
         }
       } else {
         displayName = msg.from ? (msg.from.name || msg.from.address || 'Sem remetente') : 'Sem remetente';
+        displayEmail = msg.from?.address || '';
       }
 
       const timeStr = formatDate(msg.date);
+      const subjectStr = msg.subject || '(Sem assunto)';
+      const snippetStr = (msg.snippet && msg.snippet.trim() !== subjectStr.trim()) ? msg.snippet : '';
 
-      card.innerHTML = `
-        <div class="message-card-top">
-          <span class="message-sender">${escapeHtml(displayName)}</span>
-          <span class="message-date">${timeStr}</span>
-        </div>
-        <div class="message-subject">${escapeHtml(msg.subject || '(Sem assunto)')}</div>
-        <div class="message-snippet">${escapeHtml(msg.snippet || '')}</div>
-        <div class="message-card-footer">
-          <div class="message-indicators">
-            ${msg.hasAttachments ? '<i class="fa-solid fa-paperclip" title="Contém anexo"></i>' : ''}
-            ${msg.flagged ? '<i class="fa-solid fa-flag" style="color: #d83b01;" title="Sinalizado"></i>' : ''}
-          </div>
-          <div class="message-actions-hover">
-            <button type="button" class="card-action-btn btn-quick-delete" onclick="window.quickAction(event, '${msg.uid}', 'delete')" title="Excluir"><i class="fa-regular fa-trash-can"></i></button>
-            <button type="button" class="card-action-btn btn-quick-read" onclick="window.quickAction(event, '${msg.uid}', 'read')" title="${msg.seen ? 'Marcar como não lido' : 'Marcar como lido'}">
-              <i class="fa-regular ${msg.seen ? 'fa-envelope' : 'fa-envelope-open'}"></i>
-            </button>
-            <button type="button" class="card-action-btn ${msg.flagged ? 'flagged' : ''} btn-quick-flag" onclick="window.quickAction(event, '${msg.uid}', 'flag')" title="Sinalizar">
-              <i class="fa-${msg.flagged ? 'solid' : 'regular'} fa-flag"></i>
-            </button>
-          </div>
-        </div>
+      const actionsHtml = `
+        <button type="button" class="card-action-btn btn-quick-delete" onclick="window.quickAction(event, '${msg.uid}', 'delete')" title="Excluir"><i class="fa-regular fa-trash-can"></i></button>
+        <button type="button" class="card-action-btn btn-quick-read" onclick="window.quickAction(event, '${msg.uid}', 'read')" title="${msg.seen ? 'Marcar como não lido' : 'Marcar como lido'}">
+          <i class="fa-regular ${msg.seen ? 'fa-envelope' : 'fa-envelope-open'}"></i>
+        </button>
+        <button type="button" class="card-action-btn ${msg.flagged ? 'flagged' : ''} btn-quick-flag" onclick="window.quickAction(event, '${msg.uid}', 'flag')" title="Sinalizar">
+          <i class="fa-${msg.flagged ? 'solid' : 'regular'} fa-flag"></i>
+        </button>
       `;
+
+      const chkHtml = `<input type="checkbox" class="msg-checkbox msg-select-chk" data-uid="${uidStr}" ${isChecked ? 'checked' : ''} title="Selecionar e-mail">`;
+
+      if (isBottomLayout) {
+        // Compact Table-Row Layout with aligned columns: Check | Status/Clip | Email | Assunto | Data | Ações
+        const statusIcons = [
+          !msg.seen ? '<i class="fa-solid fa-circle" style="font-size: 7px; color: var(--ms-blue);" title="Não lido"></i>' : '<i class="fa-regular fa-envelope-open" style="opacity: 0.45;" title="Lido"></i>',
+          msg.hasAttachments ? '<i class="fa-solid fa-paperclip" title="Contém anexo"></i>' : '',
+          msg.flagged ? '<i class="fa-solid fa-flag" style="color: #d83b01;" title="Sinalizado"></i>' : ''
+        ].filter(Boolean).join('');
+
+        card.innerHTML = `
+          <div class="message-row-check">${chkHtml}</div>
+          <div class="message-row-status">${statusIcons}</div>
+          <div class="message-row-sender" title="${escapeHtml(displayEmail || displayName)}">${escapeHtml(displayName)}</div>
+          <div class="message-row-subject" title="${escapeHtml(subjectStr)}">
+            <span>${escapeHtml(subjectStr)}</span>
+            ${snippetStr ? `<span style="color: var(--text-secondary); font-weight: 400; margin-left: 6px;">— ${escapeHtml(snippetStr)}</span>` : ''}
+          </div>
+          <div class="message-row-date">${timeStr}</div>
+          <div class="message-row-actions">${actionsHtml}</div>
+        `;
+      } else {
+        // Compact Lateral Card Layout with left checkbox
+        card.innerHTML = `
+          <div class="message-card-lateral-wrap">
+            ${chkHtml}
+            <div class="message-card-lateral-body">
+              <div class="message-card-top" style="margin-bottom: 2px;">
+                <span class="message-sender">${escapeHtml(displayName)}</span>
+                <span class="message-date">${timeStr}</span>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                <div class="message-subject" style="margin-bottom: 0; flex: 1;">${escapeHtml(subjectStr)}</div>
+                <div class="message-indicators" style="flex-shrink: 0;">
+                  ${msg.hasAttachments ? '<i class="fa-solid fa-paperclip" title="Contém anexo"></i>' : ''}
+                  ${msg.flagged ? '<i class="fa-solid fa-flag" style="color: #d83b01;" title="Sinalizado"></i>' : ''}
+                </div>
+                <div class="message-actions-hover">${actionsHtml}</div>
+              </div>
+              ${snippetStr ? `<div class="message-snippet" style="margin-top: 2px;">${escapeHtml(snippetStr)}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      const chkEl = card.querySelector('.msg-select-chk');
+      if (chkEl) {
+        chkEl.onchange = (e) => {
+          e.stopPropagation();
+          if (chkEl.checked) selectedUids.add(uidStr);
+          else selectedUids.delete(uidStr);
+          syncSelectionUI();
+        };
+      }
 
       elMessageListScroll.appendChild(card);
     });
+    syncSelectionUI();
   }
 
   // Global window dispatcher to ensure clicks ALWAYS work
@@ -734,13 +859,26 @@
   }
 
   function updateRibbonState() {
-    const hasSelection = !!selectedMessage;
-    if (elBtnRibbonDelete) elBtnRibbonDelete.disabled = !hasSelection;
+    const bulkCount = selectedUids.size;
+    const hasSelection = bulkCount > 0 || !!selectedMessage;
+
+    if (elBtnRibbonDelete) {
+      elBtnRibbonDelete.disabled = !hasSelection;
+      const delSpan = elBtnRibbonDelete.querySelector('span');
+      if (delSpan) {
+        delSpan.textContent = bulkCount > 0 ? `Excluir (${bulkCount})` : 'Excluir';
+      }
+    }
     if (elBtnRibbonToggleRead) {
       elBtnRibbonToggleRead.disabled = !hasSelection;
       const span = elBtnRibbonToggleRead.querySelector('span');
-      if (span && selectedMessage) {
-        span.textContent = selectedMessage.seen ? 'Marcar como não lido' : 'Marcar como lido';
+      if (span) {
+        if (bulkCount > 0) {
+          const anyUnread = messages.some(m => selectedUids.has(String(m.uid)) && !m.seen);
+          span.textContent = anyUnread ? `Marcar como lidos (${bulkCount})` : `Marcar não lidos (${bulkCount})`;
+        } else if (selectedMessage) {
+          span.textContent = selectedMessage.seen ? 'Marcar como não lido' : 'Marcar como lido';
+        }
       }
     }
     if (elBtnRibbonFlag) elBtnRibbonFlag.disabled = !hasSelection;
@@ -755,7 +893,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder: currentFolder, uid, seen })
       });
-      const target = messages.find(m => m.uid === uid);
+      const target = messages.find(m => String(m.uid) === String(uid));
       if (target) target.seen = seen;
       renderMessageList();
       updateRibbonState();
@@ -772,7 +910,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folder: currentFolder, uid, flagged })
       });
-      const target = messages.find(m => m.uid === uid);
+      const target = messages.find(m => String(m.uid) === String(uid));
       if (target) target.flagged = flagged;
       renderMessageList();
       showToast(flagged ? 'Email sinalizado' : 'Sinalização removida');
@@ -785,8 +923,9 @@
     if (!confirm('Deseja realmente excluir este email?')) return;
     try {
       await fetch(`/api/imap/message/${uid}?folder=${encodeURIComponent(currentFolder)}`, { method: 'DELETE' });
-      messages = messages.filter(m => m.uid !== uid);
-      if (selectedMessage && selectedMessage.uid === uid) {
+      messages = messages.filter(m => String(m.uid) !== String(uid));
+      selectedUids.delete(String(uid));
+      if (selectedMessage && String(selectedMessage.uid) === String(uid)) {
         selectedMessage = null;
         elReadingContentView.style.display = 'none';
         elNoSelectionView.style.display = 'flex';
@@ -794,6 +933,72 @@
       renderMessageList();
       updateRibbonState();
       showToast('Email excluído com sucesso');
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function bulkDeleteEmails(uids) {
+    const list = Array.from(uids).map(String);
+    if (list.length === 0) return;
+    if (!confirm(`Deseja realmente excluir ${list.length} ${list.length === 1 ? 'e-mail selecionado' : 'e-mails selecionados'}?`)) return;
+
+    try {
+      showToast(`Excluindo ${list.length} e-mail(s)...`);
+      const res = await fetch('/api/imap/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: currentFolder, uids: list })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const uidSet = new Set(list);
+        messages = messages.filter(m => !uidSet.has(String(m.uid)));
+        selectedUids.clear();
+        if (selectedMessage && uidSet.has(String(selectedMessage.uid))) {
+          selectedMessage = null;
+          if (elReadingContentView) elReadingContentView.setAttribute('style', 'display: none !important;');
+          if (elNoSelectionView) elNoSelectionView.setAttribute('style', 'display: flex !important;');
+        }
+        elMessageCountLabel.textContent = `${messages.length} ${messages.length === 1 ? 'mensagem' : 'mensagens'}`;
+        renderMessageList();
+        updateRibbonState();
+        showToast(`${list.length} ${list.length === 1 ? 'e-mail excluído' : 'e-mails excluídos'} com sucesso!`);
+      } else {
+        alert(data.error || 'Falha ao excluir e-mails selecionados');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao excluir e-mails: ' + e.message);
+    }
+  }
+
+  async function bulkSetFlags(uids, { seen, flagged }) {
+    const list = Array.from(uids).map(String);
+    if (list.length === 0) return;
+    try {
+      const res = await fetch('/api/imap/bulk-flags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: currentFolder, uids: list, seen, flagged })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const uidSet = new Set(list);
+        messages.forEach(m => {
+          if (uidSet.has(String(m.uid))) {
+            if (seen !== undefined) m.seen = seen;
+            if (flagged !== undefined) m.flagged = flagged;
+          }
+        });
+        renderMessageList();
+        updateRibbonState();
+        if (seen !== undefined) {
+          showToast(seen ? `${list.length} marcado(s) como lido(s)` : `${list.length} marcado(s) como não lido(s)`);
+        } else if (flagged !== undefined) {
+          showToast(flagged ? `${list.length} sinalizado(s)` : `Sinalização removida de ${list.length}`);
+        }
+      }
     } catch (e) {
       console.error(e);
     }
@@ -991,6 +1196,12 @@
 
   function closeCompose() {
     elComposeModal.style.display = 'none';
+    elComposeModal.classList.remove('maximized', 'minimized');
+    const btnMax = document.getElementById('btnMaximizeCompose');
+    if (btnMax) {
+      btnMax.title = 'Maximizar';
+      btnMax.innerHTML = '<i class="fa-regular fa-square"></i>';
+    }
     elComposeForm.reset();
     elComposeEditor.innerHTML = '';
     attachedFiles = [];
@@ -1064,6 +1275,10 @@
       if (data.signature) {
         sigState = { ...sigState, ...data.signature };
       }
+      if (!localStorage.getItem('outlook_reading_pane_layout') && data.layout?.readingPane) {
+        readingPaneLayout = data.layout.readingPane;
+      }
+      applyReadingPaneLayout(readingPaneLayout);
       const activeEmail = (data.imap?.user || sessionStorage.getItem('outlook_session_user') || '').toLowerCase();
       if (activeEmail) {
         const localSig = localStorage.getItem('outlook_sig_' + activeEmail);
@@ -1107,7 +1322,8 @@
         user: document.getElementById('cfgImapUser').value,
         password: document.getElementById('cfgImapPass').value
       },
-      signature: sigState
+      signature: sigState,
+      layout: { readingPane: readingPaneLayout }
     };
 
     try {
@@ -1297,16 +1513,49 @@
       showToast('Sincronizado com o servidor IMAP.');
     };
 
+    // Select All Checkboxes (Header & Columns Bar)
+    const handleSelectAllChange = (checked) => {
+      if (checked) {
+        messages.forEach(m => selectedUids.add(String(m.uid)));
+      } else {
+        selectedUids.clear();
+      }
+      syncSelectionUI();
+    };
+
+    const chkSelectAllMessages = document.getElementById('chkSelectAllMessages');
+    const chkSelectAllCols = document.getElementById('chkSelectAllCols');
+    if (chkSelectAllMessages) {
+      chkSelectAllMessages.onchange = () => handleSelectAllChange(chkSelectAllMessages.checked);
+    }
+    if (chkSelectAllCols) {
+      chkSelectAllCols.onchange = () => handleSelectAllChange(chkSelectAllCols.checked);
+    }
+
     elBtnRibbonDelete.onclick = () => {
-      if (selectedMessage) deleteEmail(selectedMessage.uid);
+      if (selectedUids.size > 0) {
+        bulkDeleteEmails(selectedUids);
+      } else if (selectedMessage) {
+        deleteEmail(selectedMessage.uid);
+      }
     };
 
     elBtnRibbonToggleRead.onclick = () => {
-      if (selectedMessage) toggleReadEmail(selectedMessage.uid, !selectedMessage.seen);
+      if (selectedUids.size > 0) {
+        const anyUnread = messages.some(m => selectedUids.has(String(m.uid)) && !m.seen);
+        bulkSetFlags(selectedUids, { seen: anyUnread });
+      } else if (selectedMessage) {
+        toggleReadEmail(selectedMessage.uid, !selectedMessage.seen);
+      }
     };
 
     elBtnRibbonFlag.onclick = () => {
-      if (selectedMessage) toggleFlagEmail(selectedMessage.uid, !selectedMessage.flagged);
+      if (selectedUids.size > 0) {
+        const anyUnflagged = messages.some(m => selectedUids.has(String(m.uid)) && !m.flagged);
+        bulkSetFlags(selectedUids, { flagged: anyUnflagged });
+      } else if (selectedMessage) {
+        toggleFlagEmail(selectedMessage.uid, !selectedMessage.flagged);
+      }
     };
 
     // Reading pane buttons
@@ -1356,6 +1605,32 @@
     // Compose actions
     elComposeForm.onsubmit = handleSendEmail;
     elBtnCloseCompose.onclick = closeCompose;
+
+    const btnMaximizeCompose = document.getElementById('btnMaximizeCompose');
+    const btnMinimizeCompose = document.getElementById('btnMinimizeCompose');
+
+    if (btnMaximizeCompose && elComposeModal) {
+      btnMaximizeCompose.onclick = () => {
+        elComposeModal.classList.remove('minimized');
+        const isMax = elComposeModal.classList.toggle('maximized');
+        btnMaximizeCompose.title = isMax ? 'Restaurar tamanho' : 'Maximizar';
+        btnMaximizeCompose.innerHTML = isMax
+          ? '<i class="fa-regular fa-clone"></i>'
+          : '<i class="fa-regular fa-square"></i>';
+      };
+    }
+
+    if (btnMinimizeCompose && elComposeModal) {
+      btnMinimizeCompose.onclick = () => {
+        elComposeModal.classList.remove('maximized');
+        if (btnMaximizeCompose) {
+          btnMaximizeCompose.title = 'Maximizar';
+          btnMaximizeCompose.innerHTML = '<i class="fa-regular fa-square"></i>';
+        }
+        elComposeModal.classList.toggle('minimized');
+      };
+    }
+
     elBtnDiscardMail.onclick = () => {
       if (confirm('Deseja descartar este rascunho?')) closeCompose();
     };
@@ -1526,6 +1801,15 @@
         sigState.html = '';
       };
     }
+
+    // Reading Pane Layout Option Cards
+    document.querySelectorAll('.layout-option-card').forEach(card => {
+      card.onclick = () => {
+        const chosen = card.getAttribute('data-layout') || 'right';
+        applyReadingPaneLayout(chosen);
+        showToast(chosen === 'bottom' ? 'Layout alterado: Visualização Inferior' : 'Layout alterado: Visualização Lateral');
+      };
+    });
 
     // Settings Modal
     const openSettings = () => {

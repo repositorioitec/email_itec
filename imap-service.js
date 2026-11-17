@@ -594,19 +594,51 @@ class ImapService {
   }
 
   async deleteMessage(folder, uid) {
+    return this.deleteMessages(folder, [uid]);
+  }
+
+  async deleteMessages(folder, uids) {
+    const cleanUids = (Array.isArray(uids) ? uids : [uids]).filter(Boolean).map(String);
+    if (cleanUids.length === 0) return { success: true };
+
     const client = await this.getClient();
     if (!client) return { success: true };
 
     try {
       const lock = await client.getMailboxLock(folder);
       try {
-        await client.messageDelete(String(uid), { uid: true });
+        await client.messageDelete(cleanUids.join(','), { uid: true });
       } finally {
         lock.release();
       }
-      return { success: true };
+      return { success: true, count: cleanUids.length };
     } catch (err) {
-      console.error('[IMAP deleteMessage Error]', err);
+      console.error('[IMAP deleteMessages Error]', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async setFlagsBulk(folder, uids, { seen, flagged }) {
+    const cleanUids = (Array.isArray(uids) ? uids : [uids]).filter(Boolean).map(String);
+    if (cleanUids.length === 0) return { success: true };
+
+    const client = await this.getClient();
+    if (!client) return { success: true };
+
+    try {
+      const range = cleanUids.join(',');
+      const lock = await client.getMailboxLock(folder);
+      try {
+        if (seen === true) await client.messageFlagsAdd(range, ['\\Seen'], { uid: true });
+        if (seen === false) await client.messageFlagsRemove(range, ['\\Seen'], { uid: true });
+        if (flagged === true) await client.messageFlagsAdd(range, ['\\Flagged'], { uid: true });
+        if (flagged === false) await client.messageFlagsRemove(range, ['\\Flagged'], { uid: true });
+      } finally {
+        lock.release();
+      }
+      return { success: true, count: cleanUids.length };
+    } catch (err) {
+      console.error('[IMAP setFlagsBulk Error]', err);
       return { success: false, error: err.message };
     }
   }

@@ -76,6 +76,7 @@ let appConfig = {
   },
   savedEmails: ['clodoaldo.silva@itecensino.com.br'],
   signaturesByUser: {},
+  layout: { readingPane: 'right' },
   demoModeIfDisconnected: true
 };
 
@@ -232,6 +233,7 @@ app.get('/api/config', (req, res) => {
       hasPassword: !!appConfig.smtp.password
     },
     signature: appConfig.signature,
+    layout: appConfig.layout || { readingPane: 'right' },
     savedEmails: appConfig.savedEmails || []
   });
 });
@@ -239,7 +241,7 @@ app.get('/api/config', (req, res) => {
 // Save config
 app.post('/api/config', (req, res) => {
   try {
-    const { imap, smtp, signature } = req.body;
+    const { imap, smtp, signature, layout } = req.body;
     if (imap) {
       appConfig.imap = {
         ...appConfig.imap,
@@ -264,12 +266,18 @@ app.post('/api/config', (req, res) => {
         appConfig.signaturesByUser[appConfig.imap.user.toLowerCase()] = appConfig.signature;
       }
     }
+    if (layout) {
+      appConfig.layout = {
+        ...(appConfig.layout || { readingPane: 'right' }),
+        ...layout
+      };
+    }
 
     saveConfigSafe(appConfig);
     imapService.updateConfig(appConfig);
     smtpService.updateConfig(appConfig);
 
-    res.json({ success: true, message: 'Configurações salvas com sucesso!', signature: appConfig.signature });
+    res.json({ success: true, message: 'Configurações salvas com sucesso!', signature: appConfig.signature, layout: appConfig.layout });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -382,6 +390,28 @@ app.delete('/api/imap/message/:uid', async (req, res) => {
     const folder = req.query.folder || 'INBOX';
     const uid = req.params.uid;
     const result = await imapService.deleteMessage(folder, uid);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Bulk delete messages
+app.post('/api/imap/bulk-delete', async (req, res) => {
+  try {
+    const { folder = 'INBOX', uids = [] } = req.body;
+    const result = await imapService.deleteMessages(folder, uids);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Bulk update flags (seen, flagged)
+app.post('/api/imap/bulk-flags', async (req, res) => {
+  try {
+    const { folder = 'INBOX', uids = [], seen, flagged } = req.body;
+    const result = await imapService.setFlagsBulk(folder, uids, { seen, flagged });
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

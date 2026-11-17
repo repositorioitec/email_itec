@@ -139,12 +139,22 @@
       </div>
     </nav>
 
-    <!-- Middle Email List Pane -->
-    <section class="message-list-pane">
+    <!-- Content Split Container (Supports Lateral or Bottom Reading Pane) -->
+    <div class="content-split" id="contentSplit">
+      <!-- Middle Email List Pane -->
+      <section class="message-list-pane">
       <div class="message-list-header">
         <div class="folder-title-row">
-          <h2 class="current-folder-title" id="currentFolderTitle">Caixa de entrada</h2>
-          <span style="font-size: 12px; color: var(--text-secondary);" id="messageCountLabel">Carregando...</span>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label class="select-all-label" title="Selecionar todos os e-mails visíveis">
+              <input type="checkbox" id="chkSelectAllMessages" class="msg-checkbox">
+            </label>
+            <h2 class="current-folder-title" id="currentFolderTitle">Caixa de entrada</h2>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="selectedCountBadge" class="selected-count-badge" style="display: none;">0 selecionados</span>
+            <span style="font-size: 12px; color: var(--text-secondary);" id="messageCountLabel">Carregando...</span>
+          </div>
         </div>
         <div class="filter-tabs">
           <button class="filter-tab active" data-filter="all">Todos</button>
@@ -152,6 +162,16 @@
           <button class="filter-tab" data-filter="flagged">Sinalizados</button>
           <button class="filter-tab" data-filter="attachments">Com anexo</button>
         </div>
+      </div>
+
+      <!-- Column Header Bar (Visible in Bottom/Table Layout) -->
+      <div class="message-columns-header" id="messageColumnsHeader">
+        <div class="col-hdr col-hdr-check" title="Selecionar todos"><input type="checkbox" id="chkSelectAllCols" class="msg-checkbox"></div>
+        <div class="col-hdr col-hdr-status" title="Status / Anexo / Sinalizador"><i class="fa-regular fa-envelope"></i></div>
+        <div class="col-hdr col-hdr-sender" id="colHdrSender">De / E-mail</div>
+        <div class="col-hdr col-hdr-subject">Assunto</div>
+        <div class="col-hdr col-hdr-date">Data</div>
+        <div class="col-hdr col-hdr-actions">Ações</div>
       </div>
 
       <div class="message-list-scroll" id="messageListScroll">
@@ -230,6 +250,7 @@
         </div>
       </div>
     </main>
+    </div>
   </div>
 
   <!-- Floating Outlook Compose Modal -->
@@ -237,8 +258,9 @@
     <div class="compose-header">
       <span class="compose-title" id="composeModalTitle">Nova mensagem</span>
       <div class="compose-window-actions">
-        <button class="window-btn" id="btnMinimizeCompose" title="Minimizar"><i class="fa-solid fa-minus"></i></button>
-        <button class="window-btn" id="btnCloseCompose" title="Fechar e descartar"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="window-btn" id="btnMinimizeCompose" title="Minimizar"><i class="fa-solid fa-minus"></i></button>
+        <button type="button" class="window-btn" id="btnMaximizeCompose" title="Maximizar"><i class="fa-regular fa-square"></i></button>
+        <button type="button" class="window-btn" id="btnCloseCompose" title="Fechar e descartar"><i class="fa-solid fa-xmark"></i></button>
       </div>
     </div>
 
@@ -311,6 +333,10 @@
         <button type="button" class="settings-tab" data-tab="tabSignature" id="tabBtnSignature">
           <i class="fa-solid fa-signature"></i>
           <span>Criador de Assinaturas</span>
+        </button>
+        <button type="button" class="settings-tab" data-tab="tabLayout" id="tabBtnLayout">
+          <i class="fa-solid fa-table-columns"></i>
+          <span>Layout</span>
         </button>
       </div>
 
@@ -532,6 +558,46 @@
           </div>
         </div>
 
+        <!-- TAB 3: Layout / Reading Pane Position -->
+        <div class="settings-tab-pane" id="tabLayout">
+          <h4 style="font-size: 14px; color: var(--ms-blue); margin-bottom: 4px;">
+            <i class="fa-solid fa-table-columns"></i> Posição do Painel de Leitura
+          </h4>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+            Escolha como deseja visualizar a lista de e-mails e o conteúdo das mensagens na tela.
+          </p>
+
+          <div class="layout-options-grid">
+            <div class="layout-option-card active" id="optLayoutRight" data-layout="right">
+              <div class="layout-preview-box">
+                <div class="lp-sidebar"></div>
+                <div class="lp-list-v"></div>
+                <div class="lp-reader-v"></div>
+              </div>
+              <div class="layout-option-title">
+                <i class="fa-solid fa-circle-check lp-check"></i>
+                <span>Visualização Lateral (À Direita)</span>
+              </div>
+              <p class="layout-option-desc">Lista de mensagens à esquerda e leitura do e-mail ao lado direito (Padrão Outlook).</p>
+            </div>
+
+            <div class="layout-option-card" id="optLayoutBottom" data-layout="bottom">
+              <div class="layout-preview-box">
+                <div class="lp-sidebar"></div>
+                <div class="lp-stack">
+                  <div class="lp-list-h"></div>
+                  <div class="lp-reader-h"></div>
+                </div>
+              </div>
+              <div class="layout-option-title">
+                <i class="fa-solid fa-circle-check lp-check"></i>
+                <span>Visualização Inferior (Abaixo)</span>
+              </div>
+              <p class="layout-option-desc">Lista de mensagens na parte superior e leitura do e-mail na metade inferior.</p>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <div class="modal-footer">
@@ -616,7 +682,7 @@
     <span id="toastMessage">Operação realizada com sucesso!</span>
   </div>
 
-  <script src="app.js?v=2.3.0"></script>
+  <script src="app.js?v=2.6.0"></script>
 </body>
 </html>
 
