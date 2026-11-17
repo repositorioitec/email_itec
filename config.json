@@ -21,12 +21,12 @@
     "themeColor": "#0078d4",
     "fullName": "Clodoaldo José da Silva",
     "jobTitle": "Coordenação",
-    "company": "ITEC Ensino - Volta Redonda",
+    "company": "ITEC - Volta Redonda",
     "phone": "(24) 99949-2580",
     "email": "clodoaldo.silva@itecensino.com.br",
     "website": "www.itecensino.com.br",
     "logoDataUrl": "",
-    "html": "<br><br><br><table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; color: #323130; margin-top: 12px; border-collapse: collapse;\">\n        <tbody><tr>\n          <td style=\"padding-right: 14px; vertical-align: middle;\">\n            <div style=\"width: 52px; height: 52px; border-radius: 50%; background: #0078d4; color: #ffffff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 52px;\">CS</div>\n          </td>\n          <td style=\"border-left: 3px solid #0078d4; padding-left: 14px; vertical-align: middle;\">\n            <div style=\"font-size: 15px; font-weight: 700; color: #0078d4; line-height: 1.2;\">Clodoaldo José da Silva</div>\n            <div style=\"font-size: 12px; font-weight: 600; color: #605e5c; margin-top: 2px;\">Coordenação • ITEC Ensino - Volta Redonda</div>\n            <div style=\"font-size: 12px; color: #323130; margin-top: 6px;\"><span>📞 (24) 99949-2580</span> &nbsp;|&nbsp; <span>✉️ <a href=\"mailto:clodoaldo.silva@itecensino.com.br\" style=\"color: #0078d4; text-decoration: none;\">clodoaldo.silva@itecensino.com.br</a></span> &nbsp;|&nbsp; <span>🌐 <a href=\"https://www.itecensino.com.br\" target=\"_blank\" style=\"color: #0078d4; text-decoration: none;\">www.itecensino.com.br</a></span></div>\n          </td>\n        </tr>\n      </tbody></table>"
+    "html": "<table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; color: #323130; margin-top: 12px; border-collapse: collapse;\">\n        <tbody><tr>\n          <td style=\"padding-right: 14px; vertical-align: middle;\">\n            <div style=\"width: 52px; height: 52px; border-radius: 50%; background: #0078d4; color: #ffffff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 52px;\">CS</div>\n          </td>\n          <td style=\"border-left: 3px solid #0078d4; padding-left: 14px; vertical-align: middle;\">\n            <div style=\"font-size: 15px; font-weight: 700; color: #0078d4; line-height: 1.2;\">Clodoaldo José da Silva</div>\n            <div style=\"font-size: 12px; font-weight: 600; color: #605e5c; margin-top: 2px;\">Coordenação • ITEC - Volta Redonda</div>\n            <div style=\"font-size: 12px; color: #323130; margin-top: 6px;\"><span>📞 (24) 99949-2580</span>&nbsp;&nbsp;</div><div style=\"font-size: 12px; color: #323130; margin-top: 6px;\">|&nbsp; <span>✉️ <a href=\"mailto:clodoaldo.silva@itecensino.com.br\" style=\"color: #0078d4; text-decoration: none;\">clodoaldo.silva@itecensino.com.br</a></span> &nbsp;</div><div style=\"font-size: 12px; color: #323130; margin-top: 6px;\">|&nbsp; <span>🌐 <a href=\"https://www.itecensino.com.br\" target=\"_blank\" style=\"color: #0078d4; text-decoration: none;\">www.itecensino.com.br</a></span></div>\n          </td>\n        </tr>\n      </tbody></table>"
   },
   "savedEmails": [
     "clodoaldo.silva@itecensino.com.br"
@@ -40,13 +40,242 @@
       "themeColor": "#0078d4",
       "fullName": "Clodoaldo José da Silva",
       "jobTitle": "Coordenação",
-      "company": "ITEC Ensino - Volta Redonda",
+      "company": "ITEC - Volta Redonda",
       "phone": "(24) 99949-2580",
       "email": "clodoaldo.silva@itecensino.com.br",
       "website": "www.itecensino.com.br",
       "logoDataUrl": "",
-      "html": "<br><br><br><table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; color: #323130; margin-top: 12px; border-collapse: collapse;\">\n        <tbody><tr>\n          <td style=\"padding-right: 14px; vertical-align: middle;\">\n            <div style=\"width: 52px; height: 52px; border-radius: 50%; background: #0078d4; color: #ffffff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 52px;\">CS</div>\n          </td>\n          <td style=\"border-left: 3px solid #0078d4; padding-left: 14px; vertical-align: middle;\">\n            <div style=\"font-size: 15px; font-weight: 700; color: #0078d4; line-height: 1.2;\">Clodoaldo José da Silva</div>\n            <div style=\"font-size: 12px; font-weight: 600; color: #605e5c; margin-top: 2px;\">Coordenação • ITEC Ensino - Volta Redonda</div>\n            <div style=\"font-size: 12px; color: #323130; margin-top: 6px;\"><span>📞 (24) 99949-2580</span> &nbsp;|&nbsp; <span>✉️ <a href=\"mailto:clodoaldo.silva@itecensino.com.br\" style=\"color: #0078d4; text-decoration: none;\">clodoaldo.silva@itecensino.com.br</a></span> &nbsp;|&nbsp; <span>🌐 <a href=\"https://www.itecensino.com.br\" target=\"_blank\" style=\"color: #0078d4; text-decoration: none;\">www.itecensino.com.br</a></span></div>\n          </td>\n        </tr>\n      </tbody></table>"
+      "html": "<table cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13px; color: #323130; margin-top: 12px; border-collapse: collapse;\">\n        <tbody><tr>\n          <td style=\"padding-right: 14px; vertical-align: middle;\">\n            <div style=\"width: 52px; height: 52px; border-radius: 50%; background: #0078d4; color: #ffffff; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 52px;\">CS</div>\n          </td>\n          <td style=\"border-left: 3px solid #0078d4; padding-left: 14px; vertical-align: middle;\">\n            <div style=\"font-size: 15px; font-weight: 700; color: #0078d4; line-height: 1.2;\">Clodoaldo José da Silva</div>\n            <div style=\"font-size: 12px; font-weight: 600; color: #605e5c; margin-top: 2px;\">Coordenação • ITEC - Volta Redonda</div>\n            <div style=\"font-size: 12px; color: #323130; margin-top: 6px;\"><span>📞 (24) 99949-2580</span>&nbsp;&nbsp;</div><div style=\"font-size: 12px; color: #323130; margin-top: 6px;\">|&nbsp; <span>✉️ <a href=\"mailto:clodoaldo.silva@itecensino.com.br\" style=\"color: #0078d4; text-decoration: none;\">clodoaldo.silva@itecensino.com.br</a></span> &nbsp;</div><div style=\"font-size: 12px; color: #323130; margin-top: 6px;\">|&nbsp; <span>🌐 <a href=\"https://www.itecensino.com.br\" target=\"_blank\" style=\"color: #0078d4; text-decoration: none;\">www.itecensino.com.br</a></span></div>\n          </td>\n        </tr>\n      </tbody></table>"
     }
+  },
+  "contactsByUser": {
+    "clodoaldo.silva@itecensino.com.br": [
+      {
+        "email": "albert.espilari@gmail.com",
+        "name": "Albert Espilari Fernandes",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "carla.mattos@itecensino.com.br",
+        "name": "carla.mattos",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "carolina.fernandes@itecensino.com.br",
+        "name": "Carolina",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "catiaperete@itecensino.com.br",
+        "name": "Catiaperete",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "ventureli787@gmail.com",
+        "name": "Cesar Ventura",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "clodoaldo.itec@gmail.com",
+        "name": "Clodoaldo Silva",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "controladoria@gruposels.com.br",
+        "name": "controladoria",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "cristiane.lins@itecensino.com.br",
+        "name": "cristiane.lins",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "daniele.henriques@itecensino.com.br",
+        "name": "daniele.henriques",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "danielehenriques.itec@gmail.com",
+        "name": "danielehenriques.itec",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "danielle.medeiros@gruposels.com.br",
+        "name": "danielle.medeiros",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "debora.azevedo@itecensino.com.br",
+        "name": "debora.azevedo",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "debora.itec@gmail.com",
+        "name": "debora.itec",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "news@eboxdigital.com.br",
+        "name": "Ebox",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "contato@eboxdigital.com.br",
+        "name": "Ebox Sign",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "financeiro@gruposels.com.br",
+        "name": "Financeiro",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "bielymeireles2@gmail.com",
+        "name": "Gabriely Meireles",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "goncalo.bezerra@itecensino.com.br",
+        "name": "Goncalo Bezerra",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "lena.assis@itecensino.com.br",
+        "name": "Lena Assis",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "liliane.andrade@gruposels.com.br",
+        "name": "liliane.andrade",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "pedro.faria@itecensino.com.br",
+        "name": "pedro.faria",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "raissaeloiii@gmail.com",
+        "name": "raissa eloi",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "raphaelajlopes@yahoo.com.br",
+        "name": "Raphaela J L Rezende",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "raphaela.rezende@gruposels.com.br",
+        "name": "raphaela.rezende",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "rh@gruposels.com.br",
+        "name": "Rh",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "secretaria.vr@itecensino.com.br",
+        "name": "Secretaria Vr",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "secretariaitecangra@gmail.com",
+        "name": "Secretariaitecangra",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      },
+      {
+        "email": "ti@gruposels.com.br",
+        "name": "ti",
+        "phone": "",
+        "company": "",
+        "source": "servidor"
+      }
+    ]
+  },
+  "deletedContactsByUser": {},
+  "calendarByUser": {
+    "clodoaldo.silva@itecensino.com.br": [
+      {
+        "id": "evt_1794934598351_30xl0",
+        "title": "Reunião RH",
+        "date": "2026-11-17",
+        "startTime": "09:00",
+        "endTime": "16:00",
+        "location": "Google Meet",
+        "description": "Tratar de assuntos sobre liderança corporativa.",
+        "color": "#107c41",
+        "attendees": ""
+      }
+    ]
+  },
+  "todosByUser": {
+    "clodoaldo.silva@itecensino.com.br": [
+      {
+        "id": "todo_1794934900830_couoq",
+        "title": "Lancamento de notas da turma 16N",
+        "dueDate": "2026-11-18",
+        "important": true,
+        "completed": true,
+        "notes": "",
+        "createdAt": "2026-11-17T17:01:40.832Z"
+      }
+    ]
   },
   "layout": {
     "readingPane": "bottom"

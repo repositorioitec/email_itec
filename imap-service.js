@@ -727,6 +727,56 @@ class ImapService {
       console.warn('[IMAP appendSentMessage]:', err.message);
     }
   }
+
+  async extractContactsFromServer(limitPerFolder = 100) {
+    const client = await this.getClient();
+    if (!client) return [];
+
+    const ownEmail = (this.config.imap?.user || '').trim().toLowerCase();
+    const map = new Map();
+
+    const addAddress = (addrObj) => {
+      if (!addrObj || !addrObj.address) return;
+      const email = String(addrObj.address).trim().toLowerCase();
+      if (!email || !email.includes('@') || email === ownEmail) return;
+      const name = (addrObj.name || '').trim();
+      const existing = map.get(email);
+      if (!existing || (!existing.name && name)) {
+        map.set(email, {
+          email,
+          name: name || existing?.name || email.split('@')[0],
+          phone: existing?.phone || '',
+          company: existing?.company || '',
+          source: 'servidor'
+        });
+      }
+    };
+
+    const foldersToScan = ['INBOX', 'Sent'];
+    for (const folder of foldersToScan) {
+      try {
+        const lock = await client.getMailboxLock(folder);
+        try {
+          const total = client.mailbox?.exists || 0;
+          if (total > 0) {
+            const range = `${Math.max(1, total - limitPerFolder + 1)}:*`;
+            for await (const msg of client.fetch(range, { envelope: true })) {
+              const env = msg.envelope || {};
+              (env.from || []).forEach(addAddress);
+              (env.to || []).forEach(addAddress);
+              (env.cc || []).forEach(addAddress);
+            }
+          }
+        } finally {
+          lock.release();
+        }
+      } catch (err) {
+        console.warn(`[IMAP Contacts] Aviso ao escanear pasta "${folder}":`, err.message);
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'pt-BR'));
+  }
 }
 
 module.exports = ImapService;

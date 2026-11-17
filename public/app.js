@@ -132,11 +132,22 @@
     } catch (e) {}
 
     const elContentSplit = document.getElementById('contentSplit');
+    const elListPane = document.getElementById('messageListPane');
     if (elContentSplit) {
       if (readingPaneLayout === 'bottom') {
         elContentSplit.classList.add('layout-bottom');
+        if (elListPane) {
+          elListPane.style.width = '';
+          const savedH = localStorage.getItem('outlook_split_height');
+          elListPane.style.height = savedH ? `${savedH}px` : '';
+        }
       } else {
         elContentSplit.classList.remove('layout-bottom');
+        if (elListPane) {
+          elListPane.style.height = '';
+          const savedW = localStorage.getItem('outlook_split_width');
+          elListPane.style.width = savedW ? `${savedW}px` : '';
+        }
       }
     }
 
@@ -173,6 +184,9 @@
       if (elLoginOverlay) elLoginOverlay.style.display = 'none';
       await loadFolders();
       await loadMessages();
+      loadContacts();
+      loadCalendarEvents();
+      loadTodos();
     } else {
       showLoginScreen();
     }
@@ -331,6 +345,9 @@
         showToast(`Bem-vindo(a), ${email}!`);
         await loadFolders();
         await loadMessages();
+        loadContacts();
+        loadCalendarEvents();
+        loadTodos();
       } else {
         if (elLoginErrorBox) {
           elLoginErrorBox.style.display = 'block';
@@ -1300,6 +1317,741 @@
     showToast('Assinatura aplicada ao e-mail!');
   }
 
+  // ========================
+  // Contacts Management
+  // ========================
+  let contactsList = [];
+  let contactsSearchQuery = '';
+
+  function getContactsStorageKey() {
+    const user = (sessionStorage.getItem('outlook_session_user') || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
+    return 'outlook_contacts_' + user;
+  }
+
+  function updateContactsDatalist() {
+    const dl = document.getElementById('contactsDatalist');
+    if (!dl) return;
+    dl.innerHTML = contactsList.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name || c.email)}</option>`).join('');
+  }
+
+  function renderContactsList() {
+    const container = document.getElementById('contactsListContainer');
+    const countEl = document.getElementById('contactsCountLabel');
+    if (!container) return;
+
+    const q = contactsSearchQuery.trim().toLowerCase();
+    const filtered = q
+      ? contactsList.filter(c =>
+          (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.email && c.email.toLowerCase().includes(q)) ||
+          (c.company && c.company.toLowerCase().includes(q)) ||
+          (c.phone && c.phone.toLowerCase().includes(q))
+        )
+      : contactsList;
+
+    if (countEl) {
+      countEl.textContent = `${filtered.length} ${filtered.length === 1 ? 'contato' : 'contatos'}`;
+    }
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 48px 20px; text-align: center; color: var(--text-secondary);">
+          <i class="fa-regular fa-address-book" style="font-size: 40px; opacity: 0.4; margin-bottom: 12px; display: block;"></i>
+          <p style="font-size: 14px; margin-bottom: 12px;">${q ? 'Nenhum contato encontrado para essa busca.' : 'Nenhum contato salvo ainda.'}</p>
+          ${!q ? `<button type="button" class="action-btn primary" id="btnEmptySyncContacts" style="margin: 0 auto;"><i class="fa-solid fa-rotate"></i> <span>Sincronizar Contatos do Servidor</span></button>` : ''}
+        </div>
+      `;
+      const emptyBtn = document.getElementById('btnEmptySyncContacts');
+      if (emptyBtn) emptyBtn.onclick = () => syncContactsFromServer();
+      return;
+    }
+
+    container.innerHTML = '';
+    filtered.forEach(contact => {
+      const row = document.createElement('div');
+      row.className = 'contact-row';
+      row.innerHTML = `
+        <div class="ct-col ct-col-name">
+          <div class="ct-avatar">${getInitials(contact.name || contact.email)}</div>
+          <span title="${escapeHtml(contact.name || '')}">${escapeHtml(contact.name || contact.email.split('@')[0])}</span>
+        </div>
+        <div class="ct-col ct-col-email" title="${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</div>
+        <div class="ct-col ct-col-phone">${escapeHtml(contact.phone || '—')}</div>
+        <div class="ct-col ct-col-company">
+          ${contact.company ? escapeHtml(contact.company) : `<span class="ct-badge-source">${contact.source === 'servidor' ? 'Servidor IMAP' : 'Manual'}</span>`}
+        </div>
+        <div class="ct-col ct-col-actions">
+          <button type="button" class="action-btn btn-ct-mail" title="Enviar e-mail para ${escapeHtml(contact.email)}" style="padding: 4px 8px;">
+            <i class="fa-regular fa-paper-plane" style="color: var(--ms-blue);"></i>
+          </button>
+          <button type="button" class="action-btn btn-ct-edit" title="Editar contato" style="padding: 4px 8px;">
+            <i class="fa-regular fa-pen-to-square"></i>
+          </button>
+          <button type="button" class="action-btn btn-ct-del" title="Excluir contato" style="padding: 4px 8px; color: #a80000;">
+            <i class="fa-regular fa-trash-can"></i>
+          </button>
+        </div>
+      `;
+
+      row.querySelector('.btn-ct-mail').onclick = () => {
+        openCompose({ to: contact.email });
+      };
+      row.querySelector('.btn-ct-edit').onclick = () => {
+        openContactModal(contact);
+      };
+      row.querySelector('.btn-ct-del').onclick = () => {
+        deleteContact(contact.email);
+      };
+
+      container.appendChild(row);
+    });
+  }
+
+  async function loadContacts() {
+    try {
+      const res = await fetch('/api/contacts');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.contacts) && data.contacts.length > 0) {
+        contactsList = data.contacts;
+        try { localStorage.setItem(getContactsStorageKey(), JSON.stringify(contactsList)); } catch (e) {}
+      } else {
+        try {
+          const cached = JSON.parse(localStorage.getItem(getContactsStorageKey()) || '[]');
+          if (Array.isArray(cached) && cached.length > 0) contactsList = cached;
+        } catch (e) {}
+      }
+      updateContactsDatalist();
+      renderContactsList();
+    } catch (err) {
+      console.warn('Erro ao carregar contatos:', err);
+    }
+  }
+
+  async function syncContactsFromServer() {
+    const btn = document.getElementById('btnSyncContacts');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Sincronizando...</span>';
+    }
+    try {
+      const res = await fetch('/api/contacts/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        contactsList = data.contacts || [];
+        try { localStorage.setItem(getContactsStorageKey(), JSON.stringify(contactsList)); } catch (e) {}
+        updateContactsDatalist();
+        renderContactsList();
+        showToast(`Sincronizado! ${data.total} contato(s) disponível(is) (${data.added} novo(s)).`);
+      } else {
+        alert(data.error || 'Erro ao sincronizar contatos com o servidor.');
+      }
+    } catch (err) {
+      alert('Erro ao sincronizar contatos: ' + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-rotate" style="color: var(--ms-blue);"></i> <span>Sincronizar com Servidor</span>';
+      }
+    }
+  }
+
+  function openContactModal(contact = null) {
+    const modal = document.getElementById('contactModal');
+    const titleEl = document.getElementById('contactModalTitle');
+    const origEl = document.getElementById('contactOriginalEmail');
+    const nameEl = document.getElementById('contactNameInput');
+    const emailEl = document.getElementById('contactEmailInput');
+    const phoneEl = document.getElementById('contactPhoneInput');
+    const compEl = document.getElementById('contactCompanyInput');
+    if (!modal) return;
+
+    if (contact) {
+      if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-user-pen" style="color: var(--ms-blue); margin-right: 8px;"></i>Editar Contato';
+      if (origEl) origEl.value = contact.email || '';
+      if (nameEl) nameEl.value = contact.name || '';
+      if (emailEl) emailEl.value = contact.email || '';
+      if (phoneEl) phoneEl.value = contact.phone || '';
+      if (compEl) compEl.value = contact.company || '';
+    } else {
+      if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-user-plus" style="color: var(--ms-blue); margin-right: 8px;"></i>Novo Contato';
+      if (origEl) origEl.value = '';
+      if (nameEl) nameEl.value = '';
+      if (emailEl) emailEl.value = '';
+      if (phoneEl) phoneEl.value = '';
+      if (compEl) compEl.value = '';
+    }
+
+    modal.style.display = 'flex';
+    if (nameEl) nameEl.focus();
+  }
+
+  async function saveContact(e) {
+    e.preventDefault();
+    const payload = {
+      originalEmail: document.getElementById('contactOriginalEmail')?.value || '',
+      name: document.getElementById('contactNameInput')?.value || '',
+      email: document.getElementById('contactEmailInput')?.value || '',
+      phone: document.getElementById('contactPhoneInput')?.value || '',
+      company: document.getElementById('contactCompanyInput')?.value || ''
+    };
+
+    try {
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        contactsList = data.contacts || [];
+        try { localStorage.setItem(getContactsStorageKey(), JSON.stringify(contactsList)); } catch (err) {}
+        updateContactsDatalist();
+        renderContactsList();
+        const modal = document.getElementById('contactModal');
+        if (modal) modal.style.display = 'none';
+        showToast('Contato salvo com sucesso!');
+      } else {
+        alert(data.error || 'Não foi possível salvar o contato.');
+      }
+    } catch (err) {
+      alert('Erro ao salvar contato: ' + err.message);
+    }
+  }
+
+  async function deleteContact(email) {
+    if (!confirm(`Deseja realmente excluir o contato "${email}"?`)) return;
+    try {
+      const res = await fetch(`/api/contacts?email=${encodeURIComponent(email)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        contactsList = data.contacts || [];
+        try { localStorage.setItem(getContactsStorageKey(), JSON.stringify(contactsList)); } catch (err) {}
+        updateContactsDatalist();
+        renderContactsList();
+        showToast('Contato excluído com sucesso!');
+      }
+    } catch (err) {
+      alert('Erro ao excluir contato: ' + err.message);
+    }
+  }
+
+  // ========================
+  // Calendar Management
+  // ========================
+  let calendarEvents = [];
+  let calCurrentDate = new Date();
+  let calSelectedDateStr = toLocalDateStr(new Date());
+
+  function toLocalDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function getCalendarStorageKey() {
+    const user = (sessionStorage.getItem('outlook_session_user') || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
+    return 'outlook_calendar_' + user;
+  }
+
+  async function loadCalendarEvents() {
+    try {
+      const res = await fetch('/api/calendar');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.events) && data.events.length > 0) {
+        calendarEvents = data.events;
+        try { localStorage.setItem(getCalendarStorageKey(), JSON.stringify(calendarEvents)); } catch (e) {}
+      } else {
+        try {
+          const cached = JSON.parse(localStorage.getItem(getCalendarStorageKey()) || '[]');
+          if (Array.isArray(cached) && cached.length > 0) calendarEvents = cached;
+        } catch (e) {}
+      }
+      renderCalendar();
+    } catch (err) {
+      console.warn('Erro ao carregar calendário:', err);
+    }
+  }
+
+  function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    const titleEl = document.getElementById('calMonthTitle');
+    if (!grid) return;
+
+    const year = calCurrentDate.getFullYear();
+    const month = calCurrentDate.getMonth();
+    const monthNames = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    if (titleEl) {
+      titleEl.textContent = `${monthNames[month]} de ${year}`;
+    }
+
+    const firstDayOfMonth = new Date(year, month, 1);
+    const startWeekday = firstDayOfMonth.getDay(); // 0=Sun..6=Sat
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    const todayStr = toLocalDateStr(new Date());
+
+    const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
+    grid.innerHTML = '';
+
+    for (let i = 0; i < totalCells; i++) {
+      let cellDate;
+      let isOtherMonth = false;
+
+      if (i < startWeekday) {
+        const dayNum = daysInPrevMonth - startWeekday + 1 + i;
+        cellDate = new Date(year, month - 1, dayNum);
+        isOtherMonth = true;
+      } else if (i >= startWeekday + daysInMonth) {
+        const dayNum = i - (startWeekday + daysInMonth) + 1;
+        cellDate = new Date(year, month + 1, dayNum);
+        isOtherMonth = true;
+      } else {
+        const dayNum = i - startWeekday + 1;
+        cellDate = new Date(year, month, dayNum);
+      }
+
+      const dateStr = toLocalDateStr(cellDate);
+      const dayEvents = calendarEvents.filter(ev => ev.date === dateStr);
+
+      const cell = document.createElement('div');
+      cell.className = `cal-day-cell ${isOtherMonth ? 'other-month' : ''} ${dateStr === todayStr ? 'is-today' : ''} ${dateStr === calSelectedDateStr ? 'selected-day' : ''}`;
+      cell.innerHTML = `<div class="cal-day-number">${cellDate.getDate()}</div>`;
+
+      dayEvents.slice(0, 3).forEach(ev => {
+        const pill = document.createElement('div');
+        pill.className = 'cal-event-pill';
+        pill.style.backgroundColor = ev.color || '#0078d4';
+        pill.textContent = `${ev.startTime ? ev.startTime + ' ' : ''}${ev.title}`;
+        pill.title = `${ev.startTime} - ${ev.endTime}: ${ev.title}`;
+        pill.onclick = (e) => {
+          e.stopPropagation();
+          calSelectedDateStr = dateStr;
+          renderCalendar();
+          openCalendarEventModal(ev);
+        };
+        cell.appendChild(pill);
+      });
+
+      if (dayEvents.length > 3) {
+        const more = document.createElement('div');
+        more.style.fontSize = '10px';
+        more.style.color = 'var(--text-secondary)';
+        more.style.fontWeight = '600';
+        more.textContent = `+${dayEvents.length - 3} mais`;
+        cell.appendChild(more);
+      }
+
+      cell.onclick = () => {
+        calSelectedDateStr = dateStr;
+        renderCalendar();
+      };
+
+      cell.ondblclick = () => {
+        calSelectedDateStr = dateStr;
+        openCalendarEventModal(null, dateStr);
+      };
+
+      grid.appendChild(cell);
+    }
+
+    renderSelectedDayAgenda();
+  }
+
+  function renderSelectedDayAgenda() {
+    const titleEl = document.getElementById('calSelectedDayTitle');
+    const listEl = document.getElementById('calSelectedDayList');
+    if (!listEl) return;
+
+    const parts = calSelectedDateStr.split('-');
+    const formatted = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : calSelectedDateStr;
+    if (titleEl) {
+      titleEl.textContent = `Agenda • ${formatted}`;
+    }
+
+    const dayEvents = calendarEvents.filter(ev => ev.date === calSelectedDateStr);
+    if (dayEvents.length === 0) {
+      listEl.innerHTML = `
+        <div style="text-align: center; padding: 30px 12px; color: var(--text-secondary);">
+          <i class="fa-regular fa-calendar-check" style="font-size: 30px; opacity: 0.4; margin-bottom: 8px; display: block;"></i>
+          <p style="font-size: 12px; margin-bottom: 12px;">Nenhum compromisso agendado para este dia.</p>
+          <button type="button" class="action-btn primary" id="btnAgendaQuickAdd" style="margin: 0 auto;">
+            <i class="fa-solid fa-plus"></i> <span>Agendar neste dia</span>
+          </button>
+        </div>
+      `;
+      const quickAdd = document.getElementById('btnAgendaQuickAdd');
+      if (quickAdd) quickAdd.onclick = () => openCalendarEventModal(null, calSelectedDateStr);
+      return;
+    }
+
+    listEl.innerHTML = '';
+    dayEvents.forEach(ev => {
+      const card = document.createElement('div');
+      card.className = 'cal-agenda-card';
+      card.style.borderLeftColor = ev.color || '#0078d4';
+      card.innerHTML = `
+        <div style="font-size: 11px; font-weight: 700; color: ${ev.color || '#0078d4'}; margin-bottom: 2px;">
+          <i class="fa-regular fa-clock"></i> ${escapeHtml(ev.startTime || '')} - ${escapeHtml(ev.endTime || '')}
+        </div>
+        <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">
+          ${escapeHtml(ev.title)}
+        </div>
+        ${ev.location ? `<div style="font-size: 11px; color: var(--text-secondary);"><i class="fa-solid fa-location-dot"></i> ${escapeHtml(ev.location)}</div>` : ''}
+        ${ev.description ? `<div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">${escapeHtml(ev.description)}</div>` : ''}
+      `;
+      card.onclick = () => openCalendarEventModal(ev);
+      listEl.appendChild(card);
+    });
+  }
+
+  function openCalendarEventModal(ev = null, defaultDate = null) {
+    const modal = document.getElementById('calendarEventModal');
+    const titleHeader = document.getElementById('calEventModalTitle');
+    const idEl = document.getElementById('calEventId');
+    const titleEl = document.getElementById('calEventTitle');
+    const dateEl = document.getElementById('calEventDate');
+    const startEl = document.getElementById('calEventStart');
+    const endEl = document.getElementById('calEventEnd');
+    const locEl = document.getElementById('calEventLocation');
+    const colorEl = document.getElementById('calEventColor');
+    const attEl = document.getElementById('calEventAttendees');
+    const inviteEl = document.getElementById('calEventSendInvite');
+    const descEl = document.getElementById('calEventDesc');
+    const btnDel = document.getElementById('btnDeleteCalEvent');
+
+    if (!modal) return;
+
+    if (ev) {
+      if (titleHeader) titleHeader.innerHTML = '<i class="fa-regular fa-calendar-check" style="color: var(--ms-blue); margin-right: 8px;"></i>Editar Evento';
+      if (idEl) idEl.value = ev.id || '';
+      if (titleEl) titleEl.value = ev.title || '';
+      if (dateEl) dateEl.value = ev.date || calSelectedDateStr;
+      if (startEl) startEl.value = ev.startTime || '09:00';
+      if (endEl) endEl.value = ev.endTime || '10:00';
+      if (locEl) locEl.value = ev.location || '';
+      if (colorEl) colorEl.value = ev.color || '#0078d4';
+      if (attEl) attEl.value = ev.attendees || '';
+      if (inviteEl) inviteEl.checked = false;
+      if (descEl) descEl.value = ev.description || '';
+      if (btnDel) {
+        btnDel.style.display = 'inline-flex';
+        btnDel.onclick = () => deleteCalendarEvent(ev.id);
+      }
+    } else {
+      if (titleHeader) titleHeader.innerHTML = '<i class="fa-regular fa-calendar-plus" style="color: var(--ms-blue); margin-right: 8px;"></i>Novo Evento';
+      if (idEl) idEl.value = '';
+      if (titleEl) titleEl.value = '';
+      if (dateEl) dateEl.value = defaultDate || calSelectedDateStr || toLocalDateStr(new Date());
+      if (startEl) startEl.value = '09:00';
+      if (endEl) endEl.value = '10:00';
+      if (locEl) locEl.value = '';
+      if (colorEl) colorEl.value = '#0078d4';
+      if (attEl) attEl.value = '';
+      if (inviteEl) inviteEl.checked = false;
+      if (descEl) descEl.value = '';
+      if (btnDel) btnDel.style.display = 'none';
+    }
+
+    modal.style.display = 'flex';
+    if (titleEl) titleEl.focus();
+  }
+
+  async function saveCalendarEvent(e) {
+    e.preventDefault();
+    const payload = {
+      id: document.getElementById('calEventId')?.value || '',
+      title: document.getElementById('calEventTitle')?.value || '',
+      date: document.getElementById('calEventDate')?.value || '',
+      startTime: document.getElementById('calEventStart')?.value || '09:00',
+      endTime: document.getElementById('calEventEnd')?.value || '10:00',
+      location: document.getElementById('calEventLocation')?.value || '',
+      color: document.getElementById('calEventColor')?.value || '#0078d4',
+      attendees: document.getElementById('calEventAttendees')?.value || '',
+      sendInvite: document.getElementById('calEventSendInvite')?.checked === true,
+      description: document.getElementById('calEventDesc')?.value || ''
+    };
+
+    try {
+      const res = await fetch('/api/calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        calendarEvents = data.events || [];
+        try { localStorage.setItem(getCalendarStorageKey(), JSON.stringify(calendarEvents)); } catch (err) {}
+        calSelectedDateStr = payload.date;
+        renderCalendar();
+        const modal = document.getElementById('calendarEventModal');
+        if (modal) modal.style.display = 'none';
+        showToast(payload.sendInvite && payload.attendees ? 'Evento salvo e convite enviado por e-mail!' : 'Evento salvo no calendário!');
+      } else {
+        alert(data.error || 'Não foi possível salvar o evento.');
+      }
+    } catch (err) {
+      alert('Erro ao salvar evento: ' + err.message);
+    }
+  }
+
+  async function deleteCalendarEvent(eventId) {
+    if (!eventId || !confirm('Deseja realmente excluir este evento do calendário?')) return;
+    try {
+      const res = await fetch(`/api/calendar/${encodeURIComponent(eventId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        calendarEvents = data.events || [];
+        try { localStorage.setItem(getCalendarStorageKey(), JSON.stringify(calendarEvents)); } catch (err) {}
+        renderCalendar();
+        const modal = document.getElementById('calendarEventModal');
+        if (modal) modal.style.display = 'none';
+        showToast('Evento excluído do calendário.');
+      }
+    } catch (err) {
+      alert('Erro ao excluir evento: ' + err.message);
+    }
+  }
+
+  // ========================
+  // Microsoft To Do Tasks
+  // ========================
+  let todoTasks = [];
+  let todoFilter = 'today'; // 'today' | 'important' | 'all' | 'completed'
+  let todoQuickImportant = false;
+
+  function getTodosStorageKey() {
+    const user = (sessionStorage.getItem('outlook_session_user') || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
+    return 'outlook_todos_' + user;
+  }
+
+  async function loadTodos() {
+    try {
+      const res = await fetch('/api/todos');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.todos) && data.todos.length > 0) {
+        todoTasks = data.todos;
+        try { localStorage.setItem(getTodosStorageKey(), JSON.stringify(todoTasks)); } catch (e) {}
+      } else {
+        try {
+          const cached = JSON.parse(localStorage.getItem(getTodosStorageKey()) || '[]');
+          if (Array.isArray(cached) && cached.length > 0) todoTasks = cached;
+        } catch (e) {}
+      }
+      renderTodos();
+    } catch (err) {
+      console.warn('Erro ao carregar To Do:', err);
+    }
+  }
+
+  function renderTodos() {
+    const container = document.getElementById('todoListContainer');
+    const titleEl = document.getElementById('todoListTitle');
+    const subEl = document.getElementById('todoListSubtitle');
+    if (!container) return;
+
+    const todayStr = toLocalDateStr(new Date());
+
+    // Update sidebar counts
+    const countToday = todoTasks.filter(t => !t.completed && (!t.dueDate || t.dueDate <= todayStr)).length;
+    const countImp = todoTasks.filter(t => !t.completed && t.important).length;
+    const countAll = todoTasks.filter(t => !t.completed).length;
+    const countDone = todoTasks.filter(t => t.completed).length;
+
+    const elCT = document.getElementById('todoCountToday');
+    const elCI = document.getElementById('todoCountImportant');
+    const elCA = document.getElementById('todoCountAll');
+    const elCD = document.getElementById('todoCountCompleted');
+    if (elCT) elCT.textContent = countToday;
+    if (elCI) elCI.textContent = countImp;
+    if (elCA) elCA.textContent = countAll;
+    if (elCD) elCD.textContent = countDone;
+
+    const titles = {
+      today: 'Meu Dia',
+      important: 'Importante',
+      all: 'Todas as Tarefas',
+      completed: 'Concluídas'
+    };
+    if (titleEl) titleEl.textContent = titles[todoFilter] || 'Tarefas';
+    if (subEl) {
+      subEl.textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+    }
+
+    let filtered = [];
+    if (todoFilter === 'today') {
+      filtered = todoTasks.filter(t => !t.completed && (!t.dueDate || t.dueDate <= todayStr));
+    } else if (todoFilter === 'important') {
+      filtered = todoTasks.filter(t => !t.completed && t.important);
+    } else if (todoFilter === 'completed') {
+      filtered = todoTasks.filter(t => t.completed);
+    } else {
+      filtered = todoTasks.slice();
+    }
+
+    // Sort: incomplete first, then important, then newest
+    filtered.sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      if (a.important !== b.important) return a.important ? -1 : 1;
+      return 0;
+    });
+
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 48px 20px; color: var(--text-secondary);">
+          <i class="fa-regular fa-circle-check" style="font-size: 40px; opacity: 0.4; margin-bottom: 12px; display: block;"></i>
+          <p style="font-size: 14px;">Nenhuma tarefa nesta lista.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = '';
+    filtered.forEach(todo => {
+      const card = document.createElement('div');
+      card.className = `todo-item-card ${todo.completed ? 'completed' : ''}`;
+
+      let dueHtml = '';
+      if (todo.dueDate) {
+        const parts = todo.dueDate.split('-');
+        const fmt = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : todo.dueDate;
+        const isOverdue = !todo.completed && todo.dueDate < todayStr;
+        dueHtml = `<span class="todo-due-badge ${isOverdue ? 'overdue' : ''}"><i class="fa-regular fa-calendar"></i> ${isOverdue ? 'Atrasada: ' : 'Prazo: '}${fmt}</span>`;
+      }
+
+      card.innerHTML = `
+        <button type="button" class="todo-circle-chk" title="${todo.completed ? 'Reabrir tarefa' : 'Concluir tarefa'}">
+          ${todo.completed ? '<i class="fa-solid fa-check"></i>' : ''}
+        </button>
+        <div class="todo-item-body">
+          <div class="todo-item-title">${escapeHtml(todo.title)}</div>
+          ${(dueHtml || todo.notes) ? `<div class="todo-item-meta">${dueHtml}${todo.notes ? `<span><i class="fa-regular fa-note-sticky"></i> ${escapeHtml(todo.notes)}</span>` : ''}</div>` : ''}
+        </div>
+        <button type="button" class="todo-star-btn ${todo.important ? 'active' : ''}" title="${todo.important ? 'Remover importância' : 'Marcar como importante'}">
+          <i class="fa-${todo.important ? 'solid' : 'regular'} fa-star"></i>
+        </button>
+        <button type="button" class="card-action-btn btn-todo-del" title="Excluir tarefa" style="color: #a80000; padding: 6px;">
+          <i class="fa-regular fa-trash-can"></i>
+        </button>
+      `;
+
+      card.querySelector('.todo-circle-chk').onclick = () => updateTodoTask({ ...todo, completed: !todo.completed });
+      card.querySelector('.todo-star-btn').onclick = () => updateTodoTask({ ...todo, important: !todo.important });
+      card.querySelector('.btn-todo-del').onclick = () => deleteTodoTask(todo.id);
+
+      container.appendChild(card);
+    });
+  }
+
+  async function addTodoTaskFromForm(e) {
+    e.preventDefault();
+    const titleEl = document.getElementById('todoQuickTitle');
+    const dateEl = document.getElementById('todoQuickDate');
+    const starBtn = document.getElementById('todoQuickStar');
+    const title = (titleEl?.value || '').trim();
+    if (!title) return;
+
+    const payload = {
+      title,
+      dueDate: dateEl?.value || '',
+      important: todoQuickImportant || todoFilter === 'important',
+      completed: false
+    };
+
+    const ok = await updateTodoTask(payload);
+    if (ok) {
+      if (titleEl) titleEl.value = '';
+      if (dateEl) dateEl.value = '';
+      todoQuickImportant = false;
+      if (starBtn) {
+        starBtn.classList.remove('active');
+        starBtn.innerHTML = '<i class="fa-regular fa-star"></i>';
+      }
+      showToast('Tarefa adicionada ao To Do!');
+    }
+  }
+
+  async function updateTodoTask(payload) {
+    try {
+      const res = await fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        todoTasks = data.todos || [];
+        try { localStorage.setItem(getTodosStorageKey(), JSON.stringify(todoTasks)); } catch (e) {}
+        renderTodos();
+        return true;
+      }
+    } catch (err) {
+      console.error('Erro ao salvar tarefa:', err);
+    }
+    return false;
+  }
+
+  async function deleteTodoTask(id) {
+    try {
+      const res = await fetch(`/api/todos/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        todoTasks = data.todos || [];
+        try { localStorage.setItem(getTodosStorageKey(), JSON.stringify(todoTasks)); } catch (e) {}
+        renderTodos();
+        showToast('Tarefa removida.');
+      }
+    } catch (err) {
+      console.error('Erro ao excluir tarefa:', err);
+    }
+  }
+
+  function switchAppSection(section) {
+    const railMail = document.getElementById('railMailBtn');
+    const railCalendar = document.getElementById('railCalendarBtn');
+    const railContacts = document.getElementById('railContactsBtn');
+    const railTodo = document.getElementById('railTodoBtn');
+    const foldersPane = document.getElementById('foldersPane');
+    const contentSplit = document.getElementById('contentSplit');
+    const contactsView = document.getElementById('contactsView');
+    const calendarView = document.getElementById('calendarView');
+    const todoView = document.getElementById('todoView');
+
+    if (railMail) railMail.classList.remove('active');
+    if (railCalendar) railCalendar.classList.remove('active');
+    if (railContacts) railContacts.classList.remove('active');
+    if (railTodo) railTodo.classList.remove('active');
+    if (foldersPane) foldersPane.style.display = 'none';
+    if (contentSplit) contentSplit.style.display = 'none';
+    if (contactsView) contactsView.style.display = 'none';
+    if (calendarView) calendarView.style.display = 'none';
+    if (todoView) todoView.style.display = 'none';
+
+    if (section === 'contacts') {
+      if (railContacts) railContacts.classList.add('active');
+      if (contactsView) contactsView.style.display = 'flex';
+      renderContactsList();
+      if (contactsList.length === 0) {
+        syncContactsFromServer();
+      }
+    } else if (section === 'calendar') {
+      if (railCalendar) railCalendar.classList.add('active');
+      if (calendarView) calendarView.style.display = 'flex';
+      renderCalendar();
+    } else if (section === 'todo') {
+      if (railTodo) railTodo.classList.add('active');
+      if (todoView) todoView.style.display = 'flex';
+      renderTodos();
+    } else {
+      if (railMail) railMail.classList.add('active');
+      if (foldersPane) foldersPane.style.display = 'flex';
+      if (contentSplit) contentSplit.style.display = 'flex';
+    }
+  }
+
   // Compose Functions
   function openCompose(options = {}) {
     elComposeModal.style.display = 'flex';
@@ -1416,6 +2168,10 @@
         document.getElementById('userAvatar').textContent = getInitials(userShort || 'Clodoaldo Silva');
         if (elActiveUserEmailLabel) {
           elActiveUserEmailLabel.textContent = data.imap.user || '';
+        }
+        const elProfileMenuEmail = document.getElementById('profileMenuEmail');
+        if (elProfileMenuEmail) {
+          elProfileMenuEmail.textContent = data.imap.user || '';
         }
       }
       if (data.smtp) {
@@ -1748,6 +2504,167 @@
       }
     });
 
+    // Draggable Pane Resizer (Lateral Width or Bottom Height)
+    const elPaneResizer = document.getElementById('paneResizer');
+    const elContentSplit = document.getElementById('contentSplit');
+    const elListPane = document.getElementById('messageListPane');
+    if (elPaneResizer && elContentSplit && elListPane) {
+      let isResizing = false;
+
+      elPaneResizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isResizing = true;
+        elPaneResizer.classList.add('dragging');
+        document.body.classList.add('is-resizing');
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const splitRect = elContentSplit.getBoundingClientRect();
+
+        if (readingPaneLayout === 'bottom') {
+          const newHeight = Math.max(120, Math.min(splitRect.height - 150, e.clientY - splitRect.top));
+          elListPane.style.height = `${newHeight}px`;
+        } else {
+          const newWidth = Math.max(240, Math.min(splitRect.width - 280, e.clientX - splitRect.left));
+          elListPane.style.width = `${newWidth}px`;
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (!isResizing) return;
+        isResizing = false;
+        elPaneResizer.classList.remove('dragging');
+        document.body.classList.remove('is-resizing');
+
+        if (readingPaneLayout === 'bottom' && elListPane.style.height) {
+          localStorage.setItem('outlook_split_height', String(parseInt(elListPane.style.height, 10)));
+        } else if (readingPaneLayout !== 'bottom' && elListPane.style.width) {
+          localStorage.setItem('outlook_split_width', String(parseInt(elListPane.style.width, 10)));
+        }
+      });
+
+      elPaneResizer.addEventListener('dblclick', () => {
+        if (readingPaneLayout === 'bottom') {
+          elListPane.style.height = '';
+          localStorage.removeItem('outlook_split_height');
+        } else {
+          elListPane.style.width = '';
+          localStorage.removeItem('outlook_split_width');
+        }
+        showToast('Tamanho do painel restaurado para o padrão');
+      });
+    }
+
+    // App Rail Navigation (Mail <-> Calendar <-> Contacts <-> To Do) & Actions
+    const railMailBtn = document.getElementById('railMailBtn');
+    const railCalendarBtn = document.getElementById('railCalendarBtn');
+    const railContactsBtn = document.getElementById('railContactsBtn');
+    const railTodoBtn = document.getElementById('railTodoBtn');
+    if (railMailBtn) railMailBtn.onclick = () => switchAppSection('mail');
+    if (railCalendarBtn) railCalendarBtn.onclick = () => switchAppSection('calendar');
+    if (railContactsBtn) railContactsBtn.onclick = () => switchAppSection('contacts');
+    if (railTodoBtn) railTodoBtn.onclick = () => switchAppSection('todo');
+
+    // To Do Event Listeners
+    const todoAddForm = document.getElementById('todoAddForm');
+    const todoQuickStar = document.getElementById('todoQuickStar');
+    const btnEmailToTodo = document.getElementById('btnEmailToTodo');
+    if (todoAddForm) todoAddForm.onsubmit = addTodoTaskFromForm;
+    if (todoQuickStar) {
+      todoQuickStar.onclick = () => {
+        todoQuickImportant = !todoQuickImportant;
+        todoQuickStar.classList.toggle('active', todoQuickImportant);
+        todoQuickStar.innerHTML = `<i class="fa-${todoQuickImportant ? 'solid' : 'regular'} fa-star"></i>`;
+      };
+    }
+    document.querySelectorAll('[data-todo-filter]').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('[data-todo-filter]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        todoFilter = btn.getAttribute('data-todo-filter') || 'today';
+        renderTodos();
+      };
+    });
+    if (btnEmailToTodo) {
+      btnEmailToTodo.onclick = async () => {
+        if (!selectedMessage) return;
+        const sender = selectedMessage.from?.name || selectedMessage.from?.address || '';
+        const subj = selectedMessage.subject || '(Sem assunto)';
+        const ok = await updateTodoTask({
+          title: subj,
+          dueDate: toLocalDateStr(new Date()),
+          important: true,
+          completed: false,
+          notes: sender ? `E-mail de: ${sender}` : ''
+        });
+        if (ok) showToast('E-mail adicionado às tarefas do To Do!');
+      };
+    }
+
+    const btnNewCalEvent = document.getElementById('btnNewCalEvent');
+    const btnCalToday = document.getElementById('btnCalToday');
+    const btnCalPrevMonth = document.getElementById('btnCalPrevMonth');
+    const btnCalNextMonth = document.getElementById('btnCalNextMonth');
+    const btnAddEventOnSelectedDay = document.getElementById('btnAddEventOnSelectedDay');
+    const calendarEventForm = document.getElementById('calendarEventForm');
+    const btnCloseCalEventModal = document.getElementById('btnCloseCalEventModal');
+    const btnCancelCalEventModal = document.getElementById('btnCancelCalEventModal');
+    const calendarEventModal = document.getElementById('calendarEventModal');
+
+    if (btnNewCalEvent) btnNewCalEvent.onclick = () => openCalendarEventModal(null, calSelectedDateStr);
+    if (btnAddEventOnSelectedDay) btnAddEventOnSelectedDay.onclick = () => openCalendarEventModal(null, calSelectedDateStr);
+    if (btnCalToday) {
+      btnCalToday.onclick = () => {
+        calCurrentDate = new Date();
+        calSelectedDateStr = toLocalDateStr(new Date());
+        renderCalendar();
+      };
+    }
+    if (btnCalPrevMonth) {
+      btnCalPrevMonth.onclick = () => {
+        calCurrentDate = new Date(calCurrentDate.getFullYear(), calCurrentDate.getMonth() - 1, 1);
+        renderCalendar();
+      };
+    }
+    if (btnCalNextMonth) {
+      btnCalNextMonth.onclick = () => {
+        calCurrentDate = new Date(calCurrentDate.getFullYear(), calCurrentDate.getMonth() + 1, 1);
+        renderCalendar();
+      };
+    }
+    if (calendarEventForm) calendarEventForm.onsubmit = saveCalendarEvent;
+    if (btnCloseCalEventModal && calendarEventModal) {
+      btnCloseCalEventModal.onclick = () => { calendarEventModal.style.display = 'none'; };
+    }
+    if (btnCancelCalEventModal && calendarEventModal) {
+      btnCancelCalEventModal.onclick = () => { calendarEventModal.style.display = 'none'; };
+    }
+
+    const btnNewContact = document.getElementById('btnNewContact');
+    const btnSyncContacts = document.getElementById('btnSyncContacts');
+    const contactsSearchInput = document.getElementById('contactsSearchInput');
+    const contactForm = document.getElementById('contactForm');
+    const btnCloseContactModal = document.getElementById('btnCloseContactModal');
+    const btnCancelContactModal = document.getElementById('btnCancelContactModal');
+    const contactModal = document.getElementById('contactModal');
+
+    if (btnNewContact) btnNewContact.onclick = () => openContactModal(null);
+    if (btnSyncContacts) btnSyncContacts.onclick = () => syncContactsFromServer();
+    if (contactsSearchInput) {
+      contactsSearchInput.oninput = (e) => {
+        contactsSearchQuery = e.target.value || '';
+        renderContactsList();
+      };
+    }
+    if (contactForm) contactForm.onsubmit = saveContact;
+    if (btnCloseContactModal && contactModal) {
+      btnCloseContactModal.onclick = () => { contactModal.style.display = 'none'; };
+    }
+    if (btnCancelContactModal && contactModal) {
+      btnCancelContactModal.onclick = () => { contactModal.style.display = 'none'; };
+    }
+
     elBtnReply.onclick = () => {
       if (!selectedMessage) return;
       openCompose({
@@ -2070,13 +2987,29 @@
       showLoginScreen();
     };
 
-    if (elBtnSwitchAccount) {
-      elBtnSwitchAccount.onclick = triggerAccountSwitch;
+    const elUserAvatar = document.getElementById('userAvatar');
+    const elUserProfileMenu = document.getElementById('userProfileMenu');
+    const elBtnMenuLogout = document.getElementById('btnMenuLogout');
+
+    if (elUserAvatar && elUserProfileMenu) {
+      elUserAvatar.onclick = (e) => {
+        e.stopPropagation();
+        const isOpen = elUserProfileMenu.style.display === 'block';
+        elUserProfileMenu.style.display = isOpen ? 'none' : 'block';
+      };
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.user-menu-wrapper')) {
+          elUserProfileMenu.style.display = 'none';
+        }
+      });
     }
 
-    const elUserAvatar = document.getElementById('userAvatar');
-    if (elUserAvatar) {
-      elUserAvatar.onclick = triggerAccountSwitch;
+    if (elBtnMenuLogout) {
+      elBtnMenuLogout.onclick = () => {
+        if (elUserProfileMenu) elUserProfileMenu.style.display = 'none';
+        triggerAccountSwitch();
+      };
     }
 
     const btnToggleLoginPass = document.getElementById('btnToggleLoginPass');

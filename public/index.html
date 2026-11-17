@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <!-- Top Navigation Bar (Outlook Header) -->
@@ -18,10 +20,12 @@
       <div class="brand">
         <!-- Microsoft Outlook Logo -->
         <svg class="brand-icon" viewBox="0 0 24 24">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0078d4"/>
-          <path d="M14 2v6h6" fill="#2b88d8"/>
-          <path d="M7 13.5A2.5 2.5 0 0 1 9.5 11h5a2.5 2.5 0 0 1 2.5 2.5v5a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 7 18.5v-5z" fill="#ffffff" opacity="0.3"/>
-          <circle cx="12" cy="15" r="3" fill="#ffffff"/>
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0078d4" />
+          <path d="M14 2v6h6" fill="#2b88d8" />
+          <path
+            d="M7 13.5A2.5 2.5 0 0 1 9.5 11h5a2.5 2.5 0 0 1 2.5 2.5v5a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 7 18.5v-5z"
+            fill="#ffffff" opacity="0.3" />
+          <circle cx="12" cy="15" r="3" fill="#ffffff" />
         </svg>
         <span>Outlook</span>
       </div>
@@ -30,20 +34,33 @@
     <div class="topbar-center">
       <div class="search-box">
         <i class="fa-solid fa-magnifying-glass search-icon-left"></i>
-        <input type="search" id="searchInput" name="outlook_search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="" placeholder="Pesquisar mensagens, remetentes ou assuntos (Ctrl+E)">
-        <i class="fa-solid fa-xmark" id="btnClearSearch" style="display: none; position: absolute; right: 32px; color: #605e5c; cursor: pointer; font-size: 13px;" title="Limpar pesquisa"></i>
+        <input type="search" id="searchInput" name="outlook_search" autocomplete="off" autocorrect="off"
+          autocapitalize="off" spellcheck="false" value=""
+          placeholder="Pesquisar mensagens, remetentes ou assuntos (Ctrl+E)">
+        <i class="fa-solid fa-xmark" id="btnClearSearch"
+          style="display: none; position: absolute; right: 32px; color: #605e5c; cursor: pointer; font-size: 13px;"
+          title="Limpar pesquisa"></i>
         <i class="fa-solid fa-sliders search-icon-right" title="Filtros avançados de busca"></i>
       </div>
     </div>
 
     <div class="topbar-right">
-      <span id="activeUserEmailLabel" style="font-size: 12px; color: rgba(255,255,255,0.9); margin-right: 4px;">clodoaldo.silva@itecensino.com.br</span>
-      <button class="topbar-btn" id="btnSwitchAccount" title="Trocar de usuário / Sair">
-        <i class="fa-solid fa-right-from-bracket"></i>
-        <span>Trocar Conta</span>
-      </button>
-      <div class="user-avatar-btn" id="userAvatar" title="clodoaldo.silva@itecensino.com.br">
-        CS
+      <span id="activeUserEmailLabel"
+        style="font-size: 12px; color: rgba(255,255,255,0.9); margin-right: 4px;">clodoaldo.silva@itecensino.com.br</span>
+      <div class="user-menu-wrapper">
+        <div class="user-avatar-btn" id="userAvatar" title="Perfil da conta">
+          CS
+        </div>
+        <div class="user-profile-menu" id="userProfileMenu" style="display: none;">
+          <div class="user-profile-menu-header">
+            <div class="user-profile-menu-email" id="profileMenuEmail">clodoaldo.silva@itecensino.com.br</div>
+            <div style="font-size: 11px; color: var(--text-secondary);">Conta conectada</div>
+          </div>
+          <button type="button" class="user-profile-menu-item" id="btnMenuLogout">
+            <i class="fa-solid fa-right-from-bracket" style="color: #a80000;"></i>
+            <span>Sair</span>
+          </button>
+        </div>
       </div>
     </div>
   </header>
@@ -80,20 +97,20 @@
 
   <!-- Main 3-Column Outlook Layout -->
   <div class="main-layout">
-    
+
     <!-- Left App Rail -->
     <aside class="app-rail">
       <div class="rail-top">
-        <button class="rail-item active" title="Email">
+        <button class="rail-item active" id="railMailBtn" title="Email">
           <i class="fa-regular fa-envelope"></i>
         </button>
-        <button class="rail-item" title="Calendário">
+        <button class="rail-item" id="railCalendarBtn" title="Calendário">
           <i class="fa-regular fa-calendar"></i>
         </button>
-        <button class="rail-item" title="Pessoas / Contatos">
+        <button class="rail-item" id="railContactsBtn" title="Pessoas / Contatos">
           <i class="fa-regular fa-address-book"></i>
         </button>
-        <button class="rail-item" title="Tarefas / To Do">
+        <button class="rail-item" id="railTodoBtn" title="Tarefas / To Do">
           <i class="fa-regular fa-circle-check"></i>
         </button>
       </div>
@@ -105,7 +122,7 @@
     </aside>
 
     <!-- Folders Navigation Pane -->
-    <nav class="folders-pane">
+    <nav class="folders-pane" id="foldersPane">
       <div class="folder-section">
         <div class="folder-section-title">
           <span>Favoritos</span>
@@ -142,140 +159,359 @@
     <!-- Content Split Container (Supports Lateral or Bottom Reading Pane) -->
     <div class="content-split" id="contentSplit">
       <!-- Middle Email List Pane -->
-      <section class="message-list-pane">
-      <div class="message-list-header">
-        <div class="folder-title-row">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <label class="select-all-label" title="Selecionar todos os e-mails visíveis">
-              <input type="checkbox" id="chkSelectAllMessages" class="msg-checkbox">
-            </label>
-            <h2 class="current-folder-title" id="currentFolderTitle">Caixa de entrada</h2>
+      <section class="message-list-pane" id="messageListPane">
+        <div class="message-list-header">
+          <div class="folder-title-row">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <label class="select-all-label" title="Selecionar todos os e-mails visíveis">
+                <input type="checkbox" id="chkSelectAllMessages" class="msg-checkbox">
+              </label>
+              <h2 class="current-folder-title" id="currentFolderTitle">Caixa de entrada</h2>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="selectedCountBadge" class="selected-count-badge" style="display: none;">0 selecionados</span>
+              <span style="font-size: 12px; color: var(--text-secondary);" id="messageCountLabel">Carregando...</span>
+            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span id="selectedCountBadge" class="selected-count-badge" style="display: none;">0 selecionados</span>
-            <span style="font-size: 12px; color: var(--text-secondary);" id="messageCountLabel">Carregando...</span>
-          </div>
-        </div>
-        <div class="filter-tabs">
-          <button class="filter-tab active" data-filter="all">Todos</button>
-          <button class="filter-tab" data-filter="unread">Não lidos</button>
-          <button class="filter-tab" data-filter="flagged">Sinalizados</button>
-          <button class="filter-tab" data-filter="attachments">Com anexo</button>
-        </div>
-      </div>
-
-      <!-- Column Header Bar (Visible in Bottom/Table Layout) -->
-      <div class="message-columns-header" id="messageColumnsHeader">
-        <div class="col-hdr col-hdr-check" title="Selecionar todos"><input type="checkbox" id="chkSelectAllCols" class="msg-checkbox"></div>
-        <div class="col-hdr col-hdr-status" title="Status / Anexo / Sinalizador"><i class="fa-regular fa-envelope"></i></div>
-        <div class="col-hdr col-hdr-sender" id="colHdrSender">De / E-mail</div>
-        <div class="col-hdr col-hdr-subject">Assunto</div>
-        <div class="col-hdr col-hdr-date">Data</div>
-        <div class="col-hdr col-hdr-actions">Ações</div>
-      </div>
-
-      <div class="message-list-scroll" id="messageListScroll">
-        <!-- Message cards rendered here -->
-      </div>
-    </section>
-
-    <!-- Right Reading / Email Preview Pane -->
-    <main class="reading-pane" id="readingPane">
-      
-      <!-- Placeholder when no email is selected -->
-      <div class="no-selection" id="noSelectionView">
-        <i class="fa-regular fa-envelope-open no-selection-icon"></i>
-        <h3>Selecione um item para ler</h3>
-        <p>Nada selecionado no momento</p>
-      </div>
-
-      <!-- Detail view when email is selected -->
-      <div class="reading-content" id="readingContentView" style="display: none;">
-        <div class="reading-actionbar">
-          <div class="actionbar-left">
-            <button class="action-btn primary" id="btnReply">
-              <i class="fa-solid fa-reply"></i>
-              <span>Responder</span>
-            </button>
-            <button class="action-btn" id="btnReplyAll">
-              <i class="fa-solid fa-reply-all"></i>
-              <span>Responder a todos</span>
-            </button>
-            <button class="action-btn" id="btnForward">
-              <i class="fa-solid fa-share"></i>
-              <span>Encaminhar</span>
-            </button>
-          </div>
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <button class="action-btn" id="btnDeleteCurrent" title="Excluir">
-              <i class="fa-regular fa-trash-can"></i>
-            </button>
-            <button class="action-btn" id="btnToggleReadCurrent" title="Marcar como lido/não lido">
-              <i class="fa-regular fa-envelope"></i>
-            </button>
-            <button class="action-btn" id="btnFlagCurrent" title="Sinalizar">
-              <i class="fa-regular fa-flag"></i>
-            </button>
-            <button class="action-btn" id="btnMaximizeReader" title="Maximizar mensagem na tela">
-              <i class="fa-solid fa-expand"></i>
-              <span>Maximizar</span>
-            </button>
+          <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">Todos</button>
+            <button class="filter-tab" data-filter="unread">Não lidos</button>
+            <button class="filter-tab" data-filter="flagged">Sinalizados</button>
+            <button class="filter-tab" data-filter="attachments">Com anexo</button>
           </div>
         </div>
 
-        <div class="reading-header">
-          <h1 class="reading-subject" id="readSubject">Assunto do Email</h1>
-          <div class="reading-meta">
-            <div class="sender-avatar" id="readSenderAvatar">DH</div>
-            <div class="meta-details">
-              <div class="sender-row">
-                <span class="sender-name" id="readSenderName">Daniele Henriques</span>
-                <span class="email-timestamp" id="readDate">Qui 12/11/2026 13:58</span>
-              </div>
-              <div class="sender-email-address" id="readSenderEmail">&lt;daniele.henriques@itecensino.com.br&gt;</div>
-              <div class="recipients-row" id="readRecipients">
-                <strong>Para:</strong> <span id="readTo">clodoaldo.silva@itecensino.com.br</span>
+        <!-- Column Header Bar (Visible in Bottom/Table Layout) -->
+        <div class="message-columns-header" id="messageColumnsHeader">
+          <div class="col-hdr col-hdr-check" title="Selecionar todos"><input type="checkbox" id="chkSelectAllCols"
+              class="msg-checkbox"></div>
+          <div class="col-hdr col-hdr-status" title="Status / Anexo / Sinalizador"><i
+              class="fa-regular fa-envelope"></i></div>
+          <div class="col-hdr col-hdr-sender" id="colHdrSender">De / E-mail</div>
+          <div class="col-hdr col-hdr-subject">Assunto</div>
+          <div class="col-hdr col-hdr-date">Data</div>
+          <div class="col-hdr col-hdr-actions">Ações</div>
+        </div>
+
+        <div class="message-list-scroll" id="messageListScroll">
+          <!-- Message cards rendered here -->
+        </div>
+      </section>
+
+      <!-- Draggable Splitter Handle -->
+      <div class="pane-resizer" id="paneResizer" title="Arraste para redimensionar (duplo clique para restaurar)"></div>
+
+      <!-- Right Reading / Email Preview Pane -->
+      <main class="reading-pane" id="readingPane">
+
+        <!-- Placeholder when no email is selected -->
+        <div class="no-selection" id="noSelectionView">
+          <i class="fa-regular fa-envelope-open no-selection-icon"></i>
+          <h3>Selecione um item para ler</h3>
+          <p>Nada selecionado no momento</p>
+        </div>
+
+        <!-- Detail view when email is selected -->
+        <div class="reading-content" id="readingContentView" style="display: none;">
+          <div class="reading-actionbar">
+            <div class="actionbar-left">
+              <button class="action-btn primary" id="btnReply">
+                <i class="fa-solid fa-reply"></i>
+                <span>Responder</span>
+              </button>
+              <button class="action-btn" id="btnReplyAll">
+                <i class="fa-solid fa-reply-all"></i>
+                <span>Responder a todos</span>
+              </button>
+              <button class="action-btn" id="btnForward">
+                <i class="fa-solid fa-share"></i>
+                <span>Encaminhar</span>
+              </button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button class="action-btn" id="btnDeleteCurrent" title="Excluir">
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+              <button class="action-btn" id="btnToggleReadCurrent" title="Marcar como lido/não lido">
+                <i class="fa-regular fa-envelope"></i>
+              </button>
+              <button class="action-btn" id="btnFlagCurrent" title="Sinalizar">
+                <i class="fa-regular fa-flag"></i>
+              </button>
+              <button class="action-btn" id="btnEmailToTodo" title="Adicionar este e-mail como tarefa no To Do">
+                <i class="fa-regular fa-circle-check" style="color: var(--ms-blue);"></i>
+                <span>To Do</span>
+              </button>
+              <button class="action-btn" id="btnMaximizeReader" title="Maximizar mensagem na tela">
+                <i class="fa-solid fa-expand"></i>
+                <span>Maximizar</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="reading-header">
+            <h1 class="reading-subject" id="readSubject">Assunto do Email</h1>
+            <div class="reading-meta">
+              <div class="sender-avatar" id="readSenderAvatar">DH</div>
+              <div class="meta-details">
+                <div class="sender-row">
+                  <span class="sender-name" id="readSenderName">Daniele Henriques</span>
+                  <span class="email-timestamp" id="readDate">Qui 12/11/2026 13:58</span>
+                </div>
+                <div class="sender-email-address" id="readSenderEmail">&lt;daniele.henriques@itecensino.com.br&gt;</div>
+                <div class="recipients-row" id="readRecipients">
+                  <strong>Para:</strong> <span id="readTo">clodoaldo.silva@itecensino.com.br</span>
+                </div>
               </div>
             </div>
           </div>
+
+          <!-- Attachments bar -->
+          <div class="attachments-bar" id="attachmentsBar" style="display: none;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+              <i class="fa-solid fa-paperclip"></i> Anexos:
+            </span>
+            <div id="attachmentsChips" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+          </div>
+
+          <!-- Email Body HTML / Text -->
+          <div class="reading-body" id="readBody">
+            <!-- Rendered message body -->
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Contacts Management View (Hidden until Contacts icon is clicked) -->
+    <section class="contacts-view" id="contactsView" style="display: none;">
+      <div class="contacts-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <h2 style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0;">
+            <i class="fa-regular fa-address-book" style="color: var(--ms-blue); margin-right: 8px;"></i>Contatos
+          </h2>
+          <span id="contactsCountLabel" style="font-size: 12px; color: var(--text-secondary);">0 contatos</span>
         </div>
 
-        <!-- Attachments bar -->
-        <div class="attachments-bar" id="attachmentsBar" style="display: none;">
-          <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">
-            <i class="fa-solid fa-paperclip"></i> Anexos:
-          </span>
-          <div id="attachmentsChips" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
-        </div>
-
-        <!-- Email Body HTML / Text -->
-        <div class="reading-body" id="readBody">
-          <!-- Rendered message body -->
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <div style="position: relative; display: flex; align-items: center;">
+            <i class="fa-solid fa-magnifying-glass"
+              style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px;"></i>
+            <input type="search" id="contactsSearchInput" class="form-control" placeholder="Buscar contato..."
+              style="padding-left: 30px; width: 230px; height: 32px;">
+          </div>
+          <button type="button" class="action-btn" id="btnSyncContacts"
+            title="Sincronizar contatos das pastas do servidor IMAP">
+            <i class="fa-solid fa-rotate" style="color: var(--ms-blue);"></i>
+            <span>Sincronizar com Servidor</span>
+          </button>
+          <button type="button" class="action-btn primary" id="btnNewContact">
+            <i class="fa-solid fa-user-plus"></i>
+            <span>Novo Contato</span>
+          </button>
         </div>
       </div>
-    </main>
-    </div>
+
+      <div class="contacts-table-header">
+        <div class="ct-col ct-col-name">Nome</div>
+        <div class="ct-col ct-col-email">E-mail</div>
+        <div class="ct-col ct-col-phone">Telefone</div>
+        <div class="ct-col ct-col-company">Empresa / Origem</div>
+        <div class="ct-col ct-col-actions">Ações</div>
+      </div>
+
+      <div class="contacts-list-scroll" id="contactsListContainer">
+        <!-- Contacts rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- Calendar View (Hidden until Calendar icon is clicked) -->
+    <section class="calendar-view" id="calendarView" style="display: none;">
+      <div class="calendar-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button type="button" class="action-btn primary" id="btnNewCalEvent">
+            <i class="fa-solid fa-plus"></i>
+            <span>Novo Evento</span>
+          </button>
+          <button type="button" class="action-btn" id="btnCalToday">Hoje</button>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <button type="button" class="action-btn" id="btnCalPrevMonth" title="Mês anterior"
+              style="padding: 5px 10px;">
+              <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            <button type="button" class="action-btn" id="btnCalNextMonth" title="Próximo mês"
+              style="padding: 5px 10px;">
+              <i class="fa-solid fa-chevron-right"></i>
+            </button>
+          </div>
+          <h2 id="calMonthTitle" style="font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0;">
+            Novembro de 2026</h2>
+        </div>
+
+        <div style="font-size: 12px; color: var(--text-secondary);">
+          <i class="fa-regular fa-lightbulb" style="color: var(--ms-blue);"></i>
+          Clique em qualquer dia para agendar um compromisso
+        </div>
+      </div>
+
+      <div class="calendar-body-split">
+        <!-- Monthly Grid -->
+        <div class="calendar-grid-container">
+          <div class="calendar-weekdays">
+            <div>Dom</div>
+            <div>Seg</div>
+            <div>Ter</div>
+            <div>Qua</div>
+            <div>Qui</div>
+            <div>Sex</div>
+            <div>Sáb</div>
+          </div>
+          <div class="calendar-grid" id="calendarGrid">
+            <!-- Day cells rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Right Day Agenda Sidebar -->
+        <aside class="calendar-agenda-pane">
+          <div class="calendar-agenda-header">
+            <h3 id="calSelectedDayTitle" style="font-size: 14px; font-weight: 700; color: var(--ms-blue); margin: 0;">
+              Agenda do Dia</h3>
+            <button type="button" class="action-btn" id="btnAddEventOnSelectedDay" title="Adicionar evento neste dia"
+              style="padding: 4px 8px;">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+          <div class="calendar-agenda-list" id="calSelectedDayList">
+            <!-- Selected day events rendered here -->
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Microsoft To Do Tasks View (Hidden until To Do icon is clicked) -->
+    <section class="todo-view" id="todoView" style="display: none;">
+      <aside class="todo-sidebar">
+        <div class="todo-sidebar-title">Listas de Tarefas</div>
+        <button type="button" class="todo-nav-item active" data-todo-filter="today">
+          <div class="todo-nav-left"><i class="fa-regular fa-sun" style="color: #0078d4;"></i><span>Meu Dia</span></div>
+          <span class="todo-nav-count" id="todoCountToday">0</span>
+        </button>
+        <button type="button" class="todo-nav-item" data-todo-filter="important">
+          <div class="todo-nav-left"><i class="fa-regular fa-star" style="color: #d83b01;"></i><span>Importante</span>
+          </div>
+          <span class="todo-nav-count" id="todoCountImportant">0</span>
+        </button>
+        <button type="button" class="todo-nav-item" data-todo-filter="all">
+          <div class="todo-nav-left"><i class="fa-solid fa-list-check" style="color: #107c41;"></i><span>Todas as
+              Tarefas</span></div>
+          <span class="todo-nav-count" id="todoCountAll">0</span>
+        </button>
+        <button type="button" class="todo-nav-item" data-todo-filter="completed">
+          <div class="todo-nav-left"><i class="fa-regular fa-circle-check"
+              style="color: #605e5c;"></i><span>Concluídas</span></div>
+          <span class="todo-nav-count" id="todoCountCompleted">0</span>
+        </button>
+      </aside>
+
+      <div class="todo-main">
+        <div class="todo-main-header">
+          <div>
+            <h2 id="todoListTitle" style="font-size: 22px; font-weight: 700; color: #0078d4; margin: 0;">Meu Dia</h2>
+            <span id="todoListSubtitle" style="font-size: 12px; color: var(--text-secondary);"></span>
+          </div>
+        </div>
+
+        <!-- Quick Add Task Form -->
+        <form class="todo-add-bar" id="todoAddForm">
+          <i class="fa-solid fa-plus" style="color: var(--ms-blue); font-size: 15px;"></i>
+          <input type="text" id="todoQuickTitle" class="todo-add-input"
+            placeholder="Adicionar uma tarefa... (Pressione Enter para salvar)" required>
+          <input type="date" id="todoQuickDate" class="todo-add-date" title="Data de conclusão (opcional)">
+          <button type="button" id="todoQuickStar" class="todo-star-btn" title="Marcar como importante">
+            <i class="fa-regular fa-star"></i>
+          </button>
+          <button type="submit" class="action-btn primary">Adicionar</button>
+        </form>
+
+        <div class="todo-list-scroll" id="todoListContainer">
+          <!-- Tasks rendered dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Microsoft To Do Tasks View (Hidden until To Do icon is clicked) -->
+    <section class="todo-view" id="todoView" style="display: none;">
+      <aside class="todo-sidebar">
+        <div class="todo-sidebar-title">Listas de Tarefas</div>
+        <button type="button" class="todo-nav-item active" data-todo-filter="today">
+          <div class="todo-nav-left"><i class="fa-regular fa-sun" style="color: #0078d4;"></i><span>Meu Dia</span></div>
+          <span class="todo-nav-count" id="todoCountToday">0</span>
+        </button>
+        <button type="button" class="todo-nav-item" data-todo-filter="important">
+          <div class="todo-nav-left"><i class="fa-regular fa-star" style="color: #d83b01;"></i><span>Importante</span></div>
+          <span class="todo-nav-count" id="todoCountImportant">0</span>
+        </button>
+        <button type="button" class="todo-nav-item" data-todo-filter="all">
+          <div class="todo-nav-left"><i class="fa-solid fa-list-check" style="color: #107c41;"></i><span>Todas as Tarefas</span></div>
+          <span class="todo-nav-count" id="todoCountAll">0</span>
+        </button>
+        <button type="button" class="todo-nav-item" data-todo-filter="completed">
+          <div class="todo-nav-left"><i class="fa-regular fa-circle-check" style="color: #605e5c;"></i><span>Concluídas</span></div>
+          <span class="todo-nav-count" id="todoCountCompleted">0</span>
+        </button>
+      </aside>
+
+      <div class="todo-main">
+        <div class="todo-main-header">
+          <div>
+            <h2 id="todoListTitle" style="font-size: 22px; font-weight: 700; color: #0078d4; margin: 0;">Meu Dia</h2>
+            <span id="todoListSubtitle" style="font-size: 12px; color: var(--text-secondary);"></span>
+          </div>
+        </div>
+
+        <!-- Quick Add Task Form -->
+        <form class="todo-add-bar" id="todoAddForm">
+          <i class="fa-solid fa-plus" style="color: var(--ms-blue); font-size: 15px;"></i>
+          <input type="text" id="todoQuickTitle" class="todo-add-input" placeholder="Adicionar uma tarefa... (Pressione Enter para salvar)" required>
+          <input type="date" id="todoQuickDate" class="todo-add-date" title="Data de conclusão (opcional)">
+          <button type="button" id="todoQuickStar" class="todo-star-btn" title="Marcar como importante">
+            <i class="fa-regular fa-star"></i>
+          </button>
+          <button type="submit" class="action-btn primary">Adicionar</button>
+        </form>
+
+        <div class="todo-list-scroll" id="todoListContainer">
+          <!-- Tasks rendered dynamically -->
+        </div>
+      </div>
+    </section>
   </div>
+
+  <!-- Contacts Autocomplete Datalist -->
+  <datalist id="contactsDatalist"></datalist>
 
   <!-- Floating Outlook Compose Modal -->
   <div class="compose-modal" id="composeModal" style="display: none;">
     <div class="compose-header">
       <span class="compose-title" id="composeModalTitle">Nova mensagem</span>
       <div class="compose-window-actions">
-        <button type="button" class="window-btn" id="btnMinimizeCompose" title="Minimizar"><i class="fa-solid fa-minus"></i></button>
-        <button type="button" class="window-btn" id="btnMaximizeCompose" title="Maximizar"><i class="fa-regular fa-square"></i></button>
-        <button type="button" class="window-btn" id="btnCloseCompose" title="Fechar e descartar"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="window-btn" id="btnMinimizeCompose" title="Minimizar"><i
+            class="fa-solid fa-minus"></i></button>
+        <button type="button" class="window-btn" id="btnMaximizeCompose" title="Maximizar"><i
+            class="fa-regular fa-square"></i></button>
+        <button type="button" class="window-btn" id="btnCloseCompose" title="Fechar e descartar"><i
+            class="fa-solid fa-xmark"></i></button>
       </div>
     </div>
 
     <form class="compose-form" id="composeForm">
       <div class="input-row">
         <span class="input-label">Para:</span>
-        <input type="email" class="input-field" id="composeTo" placeholder="Destinatários separados por vírgula" required>
+        <input type="email" class="input-field" id="composeTo" list="contactsDatalist" multiple
+          placeholder="Destinatários separados por vírgula" required>
       </div>
       <div class="input-row">
         <span class="input-label">Cc:</span>
-        <input type="email" class="input-field" id="composeCc" placeholder="Com cópia">
+        <input type="email" class="input-field" id="composeCc" list="contactsDatalist" multiple placeholder="Com cópia">
       </div>
       <div class="input-row">
         <span class="input-label">Assunto:</span>
@@ -309,33 +545,43 @@
           <option value="32">32</option>
         </select>
         <div class="ribbon-divider" style="height: 18px;"></div>
-        <button type="button" class="format-btn" onclick="document.execCommand('bold', false, null)" title="Negrito (Ctrl+B)"><b>N</b></button>
-        <button type="button" class="format-btn" onclick="document.execCommand('italic', false, null)" title="Itálico (Ctrl+I)"><i>I</i></button>
-        <button type="button" class="format-btn" onclick="document.execCommand('underline', false, null)" title="Sublinhado (Ctrl+U)"><u>S</u></button>
-        <label class="format-btn" style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer;" title="Cor do texto">
+        <button type="button" class="format-btn" onclick="document.execCommand('bold', false, null)"
+          title="Negrito (Ctrl+B)"><b>N</b></button>
+        <button type="button" class="format-btn" onclick="document.execCommand('italic', false, null)"
+          title="Itálico (Ctrl+I)"><i>I</i></button>
+        <button type="button" class="format-btn" onclick="document.execCommand('underline', false, null)"
+          title="Sublinhado (Ctrl+U)"><u>S</u></button>
+        <label class="format-btn" style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer;"
+          title="Cor do texto">
           <i class="fa-solid fa-font" style="border-bottom: 2px solid #0078d4; padding-bottom: 1px;"></i>
-          <input type="color" id="composeTextColor" value="#201f1e" style="width: 14px; height: 14px; border: none; padding: 0; background: none; cursor: pointer;">
+          <input type="color" id="composeTextColor" value="#201f1e"
+            style="width: 14px; height: 14px; border: none; padding: 0; background: none; cursor: pointer;">
         </label>
         <div class="ribbon-divider" style="height: 18px;"></div>
-        <button type="button" class="format-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista com marcadores"><i class="fa-solid fa-list-ul"></i></button>
-        <button type="button" class="format-btn" onclick="document.execCommand('insertOrderedList', false, null)" title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
+        <button type="button" class="format-btn" onclick="document.execCommand('insertUnorderedList', false, null)"
+          title="Lista com marcadores"><i class="fa-solid fa-list-ul"></i></button>
+        <button type="button" class="format-btn" onclick="document.execCommand('insertOrderedList', false, null)"
+          title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
         <div class="ribbon-divider" style="height: 18px;"></div>
         <label class="format-btn" style="cursor: pointer;" title="Anexar arquivos">
           <i class="fa-solid fa-paperclip"></i> Anexar
           <input type="file" id="composeFileInput" multiple style="display: none;">
         </label>
-        <button type="button" class="format-btn" id="btnInsertSignatureNow" title="Inserir assinatura no corpo do e-mail">
+        <button type="button" class="format-btn" id="btnInsertSignatureNow"
+          title="Inserir assinatura no corpo do e-mail">
           <i class="fa-solid fa-signature" style="color: var(--ms-blue);"></i> Assinatura
         </button>
-        <button type="button" class="format-btn" id="btnOpenSigFromCompose" title="Editar/Criar Assinatura em Configurações">
+        <button type="button" class="format-btn" id="btnOpenSigFromCompose"
+          title="Editar/Criar Assinatura em Configurações">
           <i class="fa-solid fa-pen-nib"></i>
         </button>
         <span id="composeAttachedFilesCount" style="font-size: 11px; color: var(--ms-blue); margin-left: 6px;"></span>
       </div>
 
       <!-- Rich Body Content Editable -->
-      <div class="compose-editor" id="composeEditor" contenteditable="true" placeholder="Escreva sua mensagem aqui..."></div>
-      
+      <div class="compose-editor" id="composeEditor" contenteditable="true" placeholder="Escreva sua mensagem aqui...">
+      </div>
+
       <div class="compose-footer">
         <div style="display: flex; gap: 8px;">
           <button type="submit" class="btn-new-mail" id="btnSendMail">
@@ -353,7 +599,8 @@
   <div class="modal-overlay" id="settingsModal" style="display: none;">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3><i class="fa-solid fa-gear" style="color: var(--ms-blue); margin-right: 8px;"></i>Configurações do Outlook Webmail</h3>
+        <h3><i class="fa-solid fa-gear" style="color: var(--ms-blue); margin-right: 8px;"></i>Configurações do Outlook
+          Webmail</h3>
         <button class="window-btn" id="btnCloseSettings"><i class="fa-solid fa-xmark"></i></button>
       </div>
 
@@ -377,7 +624,8 @@
 
         <!-- TAB 1: IMAP & SMTP Server Settings -->
         <div class="settings-tab-pane active" id="tabServer">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; background: #faf9f8; padding: 10px 14px; border-radius: 6px; border: 1px solid #edebe9;">
+          <div
+            style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; background: #faf9f8; padding: 10px 14px; border-radius: 6px; border: 1px solid #edebe9;">
             <span style="font-size: 13px; color: var(--text-secondary);">
               Configure a conexão com seu servidor de email (ex: ServidorHH / Roundcube).
             </span>
@@ -387,12 +635,14 @@
             </div>
           </div>
 
-          <h4 style="font-size: 14px; margin-bottom: 8px; color: var(--ms-blue);"><i class="fa-regular fa-envelope"></i> Servidor de Entrada (IMAP)</h4>
-          
+          <h4 style="font-size: 14px; margin-bottom: 8px; color: var(--ms-blue);"><i class="fa-regular fa-envelope"></i>
+            Servidor de Entrada (IMAP)</h4>
+
           <div class="form-row">
             <div class="form-group" style="flex: 2;">
               <label>Servidor IMAP (Host):</label>
-              <input type="text" class="form-control" id="cfgImapHost" value="h58.servidorhh.com" placeholder="ex: h58.servidorhh.com">
+              <input type="text" class="form-control" id="cfgImapHost" value="h58.servidorhh.com"
+                placeholder="ex: h58.servidorhh.com">
             </div>
             <div class="form-group" style="flex: 1;">
               <label>Porta:</label>
@@ -402,18 +652,23 @@
 
           <div class="form-group">
             <label>Email / Usuário:</label>
-            <input type="email" class="form-control" id="cfgImapUser" autocomplete="off" value="clodoaldo.silva@itecensino.com.br" placeholder="seu-email@itecensino.com.br">
+            <input type="email" class="form-control" id="cfgImapUser" autocomplete="off"
+              value="clodoaldo.silva@itecensino.com.br" placeholder="seu-email@itecensino.com.br">
           </div>
 
           <div class="form-group">
             <label>Senha do Email:</label>
             <div style="position: relative; display: flex; align-items: center;">
-              <input type="password" class="form-control" id="cfgImapPass" autocomplete="new-password" placeholder="Digite sua senha do Webmail Roundcube" style="padding-right: 36px;">
-              <button type="button" id="btnTogglePassVisibility" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;" title="Mostrar/Ocultar senha">
+              <input type="password" class="form-control" id="cfgImapPass" autocomplete="new-password"
+                placeholder="Digite sua senha do Webmail Roundcube" style="padding-right: 36px;">
+              <button type="button" id="btnTogglePassVisibility"
+                style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;"
+                title="Mostrar/Ocultar senha">
                 <i class="fa-regular fa-eye" id="passEyeIcon"></i>
               </button>
             </div>
-            <span style="font-size: 11px; color: var(--text-secondary);">Digite a mesma senha utilizada para acessar o webmail no link https://h58.servidorhh.com/roundcube/</span>
+            <span style="font-size: 11px; color: var(--text-secondary);">Digite a mesma senha utilizada para acessar o
+              webmail no link https://h58.servidorhh.com/roundcube/</span>
           </div>
 
           <div class="form-group" style="margin-top: 10px;">
@@ -424,7 +679,8 @@
 
           <hr style="border: none; border-top: 1px solid var(--border-color); margin: 16px 0;">
 
-          <h4 style="font-size: 14px; margin-bottom: 8px; color: var(--ms-blue);"><i class="fa-regular fa-paper-plane"></i> Servidor de Saída (SMTP)</h4>
+          <h4 style="font-size: 14px; margin-bottom: 8px; color: var(--ms-blue);"><i
+              class="fa-regular fa-paper-plane"></i> Servidor de Saída (SMTP)</h4>
 
           <div class="form-row">
             <div class="form-group" style="flex: 2;">
@@ -436,8 +692,10 @@
               <input type="number" class="form-control" id="cfgSmtpPort" value="465">
             </div>
           </div>
-          <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: -6px; margin-bottom: 10px;">
-            <i class="fa-solid fa-circle-check" style="color: #107c41;"></i> Porta 465 (SSL) para ServidorHH com fallback automático para porta 587.
+          <span
+            style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: -6px; margin-bottom: 10px;">
+            <i class="fa-solid fa-circle-check" style="color: #107c41;"></i> Porta 465 (SSL) para ServidorHH com
+            fallback automático para porta 587.
           </span>
 
           <div id="testResultBox" class="test-result-box"></div>
@@ -459,17 +717,25 @@
           <!-- Quick Generator Assistant -->
           <div class="sig-generator-box">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <span style="font-size: 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.4px;">
+              <span
+                style="font-size: 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.4px;">
                 1. Escolha um Estilo e Preencha seus Dados
               </span>
               <div class="sig-color-swatches">
                 <span style="font-size: 11px; color: var(--text-secondary);">Cor:</span>
-                <button type="button" class="sig-color-dot active" data-color="#0078d4" style="background: #0078d4;" title="Azul Outlook"></button>
-                <button type="button" class="sig-color-dot" data-color="#004578" style="background: #004578;" title="Azul Marinho Executivo"></button>
-                <button type="button" class="sig-color-dot" data-color="#107c41" style="background: #107c41;" title="Verde Corporativo"></button>
-                <button type="button" class="sig-color-dot" data-color="#a4262c" style="background: #a4262c;" title="Bordô"></button>
-                <button type="button" class="sig-color-dot" data-color="#323130" style="background: #323130;" title="Grafite"></button>
-                <input type="color" id="sigCustomColor" value="#0078d4" style="width: 22px; height: 22px; border: none; padding: 0; background: none; cursor: pointer;" title="Cor personalizada">
+                <button type="button" class="sig-color-dot active" data-color="#0078d4" style="background: #0078d4;"
+                  title="Azul Outlook"></button>
+                <button type="button" class="sig-color-dot" data-color="#004578" style="background: #004578;"
+                  title="Azul Marinho Executivo"></button>
+                <button type="button" class="sig-color-dot" data-color="#107c41" style="background: #107c41;"
+                  title="Verde Corporativo"></button>
+                <button type="button" class="sig-color-dot" data-color="#a4262c" style="background: #a4262c;"
+                  title="Bordô"></button>
+                <button type="button" class="sig-color-dot" data-color="#323130" style="background: #323130;"
+                  title="Grafite"></button>
+                <input type="color" id="sigCustomColor" value="#0078d4"
+                  style="width: 22px; height: 22px; border: none; padding: 0; background: none; cursor: pointer;"
+                  title="Cor personalizada">
               </div>
             </div>
 
@@ -493,18 +759,21 @@
             <div class="form-row">
               <div class="form-group" style="flex: 1; margin-bottom: 8px;">
                 <label>Nome Completo:</label>
-                <input type="text" class="form-control" id="sigFullName" value="Clodoaldo José da Silva" placeholder="Ex: Clodoaldo José da Silva">
+                <input type="text" class="form-control" id="sigFullName" value="Clodoaldo José da Silva"
+                  placeholder="Ex: Clodoaldo José da Silva">
               </div>
               <div class="form-group" style="flex: 1; margin-bottom: 8px;">
                 <label>Cargo / Função:</label>
-                <input type="text" class="form-control" id="sigJobTitle" value="Direção / Coordenação" placeholder="Ex: Diretor / Coordenador">
+                <input type="text" class="form-control" id="sigJobTitle" value="Direção / Coordenação"
+                  placeholder="Ex: Diretor / Coordenador">
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group" style="flex: 1; margin-bottom: 8px;">
                 <label>Empresa / Unidade:</label>
-                <input type="text" class="form-control" id="sigCompany" value="ITEC Ensino - Volta Redonda" placeholder="Ex: ITEC - Volta Redonda">
+                <input type="text" class="form-control" id="sigCompany" value="ITEC Ensino - Volta Redonda"
+                  placeholder="Ex: ITEC - Volta Redonda">
               </div>
               <div class="form-group" style="flex: 1; margin-bottom: 8px;">
                 <label>Telefone / WhatsApp:</label>
@@ -515,15 +784,18 @@
             <div class="form-row">
               <div class="form-group" style="flex: 1; margin-bottom: 8px;">
                 <label>E-mail de Contato:</label>
-                <input type="text" class="form-control" id="sigEmail" value="clodoaldo.silva@itecensino.com.br" placeholder="clodoaldo.silva@itecensino.com.br">
+                <input type="text" class="form-control" id="sigEmail" value="clodoaldo.silva@itecensino.com.br"
+                  placeholder="clodoaldo.silva@itecensino.com.br">
               </div>
               <div class="form-group" style="flex: 1; margin-bottom: 8px;">
                 <label>Site / Endereço:</label>
-                <input type="text" class="form-control" id="sigWebsite" value="www.itecensino.com.br" placeholder="Ex: www.itecensino.com.br">
+                <input type="text" class="form-control" id="sigWebsite" value="www.itecensino.com.br"
+                  placeholder="Ex: www.itecensino.com.br">
               </div>
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px solid #e1dfdd;">
+            <div
+              style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding-top: 8px; border-top: 1px solid #e1dfdd;">
               <div style="display: flex; align-items: center; gap: 8px;">
                 <label class="action-btn" style="cursor: pointer; margin: 0;">
                   <i class="fa-regular fa-image" style="color: var(--ms-blue);"></i>
@@ -546,10 +818,12 @@
           <!-- Rich Visual Editor -->
           <div style="margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.4px;">
+              <span
+                style="font-size: 12px; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.4px;">
                 2. Editor Visual e Pré-visualização (Editável)
               </span>
-              <span style="font-size: 11px; color: var(--text-secondary);">Você pode digitar ou formatar diretamente abaixo</span>
+              <span style="font-size: 11px; color: var(--text-secondary);">Você pode digitar ou formatar diretamente
+                abaixo</span>
             </div>
 
             <div class="sig-editor-wrapper">
@@ -558,19 +832,25 @@
                 <button type="button" class="format-btn" data-sig-cmd="italic" title="Itálico"><i>I</i></button>
                 <button type="button" class="format-btn" data-sig-cmd="underline" title="Sublinhado"><u>S</u></button>
                 <div class="ribbon-divider" style="height: 16px;"></div>
-                <button type="button" class="format-btn" data-sig-cmd="justifyLeft" title="Alinhar à esquerda"><i class="fa-solid fa-align-left"></i></button>
-                <button type="button" class="format-btn" data-sig-cmd="justifyCenter" title="Centralizar"><i class="fa-solid fa-align-center"></i></button>
-                <button type="button" class="format-btn" data-sig-cmd="justifyRight" title="Alinhar à direita"><i class="fa-solid fa-align-right"></i></button>
+                <button type="button" class="format-btn" data-sig-cmd="justifyLeft" title="Alinhar à esquerda"><i
+                    class="fa-solid fa-align-left"></i></button>
+                <button type="button" class="format-btn" data-sig-cmd="justifyCenter" title="Centralizar"><i
+                    class="fa-solid fa-align-center"></i></button>
+                <button type="button" class="format-btn" data-sig-cmd="justifyRight" title="Alinhar à direita"><i
+                    class="fa-solid fa-align-right"></i></button>
                 <div class="ribbon-divider" style="height: 16px;"></div>
-                <label class="format-btn" style="display: flex; align-items: center; gap: 4px; cursor: pointer;" title="Cor do texto selecionado">
+                <label class="format-btn" style="display: flex; align-items: center; gap: 4px; cursor: pointer;"
+                  title="Cor do texto selecionado">
                   <i class="fa-solid fa-palette"></i>
-                  <input type="color" id="sigTextColorPicker" value="#0078d4" style="width: 16px; height: 16px; border: none; padding: 0; background: none; cursor: pointer;">
+                  <input type="color" id="sigTextColorPicker" value="#0078d4"
+                    style="width: 16px; height: 16px; border: none; padding: 0; background: none; cursor: pointer;">
                 </label>
                 <label class="format-btn" style="cursor: pointer;" title="Inserir imagem no cursor">
                   <i class="fa-regular fa-image"></i> Imagem
                   <input type="file" id="sigInlineImageInput" accept="image/*" style="display: none;">
                 </label>
-                <button type="button" class="format-btn" id="btnSigClear" title="Limpar assinatura" style="margin-left: auto; color: #a80000;">
+                <button type="button" class="format-btn" id="btnSigClear" title="Limpar assinatura"
+                  style="margin-left: auto; color: #a80000;">
                   <i class="fa-solid fa-eraser"></i> Limpar
                 </button>
               </div>
@@ -579,12 +859,15 @@
           </div>
 
           <!-- Automatic Insertion Settings -->
-          <div style="background: #f3f2f1; padding: 10px 14px; border-radius: 6px; display: flex; flex-direction: column; gap: 6px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
+          <div
+            style="background: #f3f2f1; padding: 10px 14px; border-radius: 6px; display: flex; flex-direction: column; gap: 6px;">
+            <label
+              style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
               <input type="checkbox" id="sigAutoNewMail" checked>
               Incluir assinatura automaticamente em novos e-mails que eu redigir
             </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
+            <label
+              style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
               <input type="checkbox" id="sigAutoReplyForward" checked>
               Incluir assinatura automaticamente nas mensagens que eu responder ou encaminhar
             </label>
@@ -611,7 +894,8 @@
                 <i class="fa-solid fa-circle-check lp-check"></i>
                 <span>Visualização Lateral (À Direita)</span>
               </div>
-              <p class="layout-option-desc">Lista de mensagens à esquerda e leitura do e-mail ao lado direito (Padrão Outlook).</p>
+              <p class="layout-option-desc">Lista de mensagens à esquerda e leitura do e-mail ao lado direito (Padrão
+                Outlook).</p>
             </div>
 
             <div class="layout-option-card" id="optLayoutBottom" data-layout="bottom">
@@ -626,7 +910,8 @@
                 <i class="fa-solid fa-circle-check lp-check"></i>
                 <span>Visualização Inferior (Abaixo)</span>
               </div>
-              <p class="layout-option-desc">Lista de mensagens na parte superior e leitura do e-mail na metade inferior.</p>
+              <p class="layout-option-desc">Lista de mensagens na parte superior e leitura do e-mail na metade inferior.
+              </p>
             </div>
           </div>
         </div>
@@ -654,9 +939,9 @@
     <div class="login-card">
       <div class="login-brand">
         <svg width="32" height="32" viewBox="0 0 24 24">
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0078d4"/>
-          <path d="M14 2v6h6" fill="#2b88d8"/>
-          <circle cx="12" cy="15" r="3" fill="#ffffff"/>
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0078d4" />
+          <path d="M14 2v6h6" fill="#2b88d8" />
+          <circle cx="12" cy="15" r="3" fill="#ffffff" />
         </svg>
         <div>
           <div class="login-brand-title">Outlook Webmail</div>
@@ -669,7 +954,8 @@
 
       <!-- Saved Email Accounts List -->
       <div id="savedEmailsSection" style="display: none; margin-bottom: 14px;">
-        <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 6px;">
+        <span
+          style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 6px;">
           Contas salvas neste computador:
         </span>
         <div id="savedEmailsList" class="saved-emails-list"></div>
@@ -678,22 +964,27 @@
       <form id="loginForm" autocomplete="on">
         <div class="form-group">
           <label for="loginEmailInput">Endereço de E-mail:</label>
-          <input type="email" class="form-control" id="loginEmailInput" list="savedEmailsDatalist" placeholder="nome@itecensino.com.br" required autocomplete="username">
+          <input type="email" class="form-control" id="loginEmailInput" list="savedEmailsDatalist"
+            placeholder="nome@itecensino.com.br" required autocomplete="username">
           <datalist id="savedEmailsDatalist"></datalist>
         </div>
 
         <div class="form-group">
           <label for="loginPasswordInput">Senha do Webmail:</label>
           <div style="position: relative; display: flex; align-items: center;">
-            <input type="password" class="form-control" id="loginPasswordInput" placeholder="Digite sua senha de acesso" required autocomplete="current-password" style="padding-right: 36px;">
-            <button type="button" id="btnToggleLoginPass" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;" title="Mostrar/Ocultar senha">
+            <input type="password" class="form-control" id="loginPasswordInput" placeholder="Digite sua senha de acesso"
+              required autocomplete="current-password" style="padding-right: 36px;">
+            <button type="button" id="btnToggleLoginPass"
+              style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;"
+              title="Mostrar/Ocultar senha">
               <i class="fa-regular fa-eye" id="loginPassEyeIcon"></i>
             </button>
           </div>
         </div>
 
         <div class="form-group" style="margin-top: 8px; margin-bottom: 16px;">
-          <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; color: var(--text-primary);">
+          <label
+            style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; color: var(--text-primary);">
             <input type="checkbox" id="loginRememberEmail" checked>
             Deixar meu e-mail gravado para não precisar digitar novamente
           </label>
@@ -709,13 +1000,159 @@
     </div>
   </div>
 
+  <!-- Attachment Preview Modal -->
+  <div class="modal-overlay" id="attachmentPreviewModal" style="display: none; z-index: 2600;">
+    <div class="modal-dialog" style="width: 860px; max-width: 95vw; height: 85vh;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
+          <i class="fa-solid fa-paperclip" style="color: var(--ms-blue);"></i>
+          <h3 id="attPreviewTitle" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Visualizar
+            Anexo</h3>
+          <span id="attPreviewSize" style="font-size: 12px; color: var(--text-secondary); flex-shrink: 0;"></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="action-btn primary" id="btnAttPreviewDownload">
+            <i class="fa-solid fa-download"></i>
+            <span>Baixar no Computador</span>
+          </button>
+          <button type="button" class="window-btn" id="btnCloseAttPreview" title="Fechar"><i
+              class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div id="attPreviewBody"
+        style="flex: 1; overflow: auto; background: #f3f2f1; display: flex; align-items: center; justify-content: center; padding: 16px;">
+        <!-- Preview content rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Contact Modal -->
+  <div class="modal-overlay" id="contactModal" style="display: none; z-index: 2650;">
+    <div class="modal-dialog" style="width: 440px;">
+      <div class="modal-header">
+        <h3 id="contactModalTitle"><i class="fa-solid fa-user-plus"
+            style="color: var(--ms-blue); margin-right: 8px;"></i>Novo Contato</h3>
+        <button type="button" class="window-btn" id="btnCloseContactModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="contactForm">
+        <div class="modal-body">
+          <input type="hidden" id="contactOriginalEmail" value="">
+          <div class="form-group">
+            <label for="contactNameInput">Nome Completo:</label>
+            <input type="text" class="form-control" id="contactNameInput" placeholder="Ex: Daniele Henriques" required>
+          </div>
+          <div class="form-group">
+            <label for="contactEmailInput">Endereço de E-mail:</label>
+            <input type="email" class="form-control" id="contactEmailInput" placeholder="nome@itecensino.com.br"
+              required>
+          </div>
+          <div class="form-group">
+            <label for="contactPhoneInput">Telefone / WhatsApp:</label>
+            <input type="text" class="form-control" id="contactPhoneInput" placeholder="(24) 99999-9999">
+          </div>
+          <div class="form-group">
+            <label for="contactCompanyInput">Empresa / Setor:</label>
+            <input type="text" class="form-control" id="contactCompanyInput" placeholder="Ex: ITEC Ensino">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn" id="btnCancelContactModal">Cancelar</button>
+          <button type="submit" class="action-btn primary" id="btnSaveContact">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span>Salvar Contato</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add / Edit Calendar Event Modal -->
+  <div class="modal-overlay" id="calendarEventModal" style="display: none; z-index: 2660;">
+    <div class="modal-dialog" style="width: 480px;">
+      <div class="modal-header">
+        <h3 id="calEventModalTitle"><i class="fa-regular fa-calendar-plus"
+            style="color: var(--ms-blue); margin-right: 8px;"></i>Novo Evento</h3>
+        <button type="button" class="window-btn" id="btnCloseCalEventModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="calendarEventForm">
+        <div class="modal-body">
+          <input type="hidden" id="calEventId" value="">
+          <div class="form-group">
+            <label for="calEventTitle">Título do Evento:</label>
+            <input type="text" class="form-control" id="calEventTitle" placeholder="Ex: Reunião pedagógica" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex: 1.4;">
+              <label for="calEventDate">Data:</label>
+              <input type="date" class="form-control" id="calEventDate" required>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label for="calEventStart">Início:</label>
+              <input type="time" class="form-control" id="calEventStart" value="09:00" required>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label for="calEventEnd">Término:</label>
+              <input type="time" class="form-control" id="calEventEnd" value="10:00" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex: 2;">
+              <label for="calEventLocation">Local / Link da Reunião:</label>
+              <input type="text" class="form-control" id="calEventLocation" placeholder="Ex: Sala 1 ou link do Meet">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label for="calEventColor">Categoria:</label>
+              <select class="form-control" id="calEventColor">
+                <option value="#0078d4">Azul Outlook</option>
+                <option value="#107c41">Verde</option>
+                <option value="#d83b01">Laranja</option>
+                <option value="#8764b8">Roxo</option>
+                <option value="#a4262c">Vermelho</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="calEventAttendees">Convidados (E-mails separados por vírgula):</label>
+            <input type="text" class="form-control" id="calEventAttendees" list="contactsDatalist"
+              placeholder="Opcional: email@itecensino.com.br">
+          </div>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label
+              style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500; color: var(--text-primary);">
+              <input type="checkbox" id="calEventSendInvite">
+              Enviar convite por e-mail para os convidados ao salvar
+            </label>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="calEventDesc">Descrição / Pauta:</label>
+            <textarea class="form-control" id="calEventDesc" rows="3" style="height: auto; padding: 8px 10px;"
+              placeholder="Detalhes ou anotações do compromisso..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn" id="btnDeleteCalEvent" style="display: none; color: #a80000;">
+            <i class="fa-regular fa-trash-can"></i>
+            <span>Excluir</span>
+          </button>
+          <div style="display: flex; gap: 8px; margin-left: auto;">
+            <button type="button" class="action-btn" id="btnCancelCalEventModal">Cancelar</button>
+            <button type="submit" class="action-btn primary" id="btnSaveCalEvent">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>Salvar Evento</span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div class="toast" id="toastNotification">
     <i class="fa-solid fa-circle-info"></i>
     <span id="toastMessage">Operação realizada com sucesso!</span>
   </div>
 
-  <script src="app.js?v=2.7.1"></script>
+  <script src="app.js?v=3.3.0"></script>
 </body>
-</html>
 
+</html>

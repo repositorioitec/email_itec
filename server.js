@@ -76,6 +76,10 @@ let appConfig = {
   },
   savedEmails: ['clodoaldo.silva@itecensino.com.br'],
   signaturesByUser: {},
+  contactsByUser: {},
+  deletedContactsByUser: {},
+  calendarByUser: {},
+  todosByUser: {},
   layout: { readingPane: 'right' },
   demoModeIfDisconnected: true
 };
@@ -95,7 +99,11 @@ let appConfig = {
         savedEmails: Array.isArray(parsed.savedEmails) && parsed.savedEmails.length > 0
           ? parsed.savedEmails
           : [parsed.imap?.user || 'clodoaldo.silva@itecensino.com.br'].filter(Boolean),
-        signaturesByUser: { ...(appConfig.signaturesByUser || {}), ...(parsed.signaturesByUser || {}) }
+        signaturesByUser: { ...(appConfig.signaturesByUser || {}), ...(parsed.signaturesByUser || {}) },
+        contactsByUser: { ...(appConfig.contactsByUser || {}), ...(parsed.contactsByUser || {}) },
+        deletedContactsByUser: { ...(appConfig.deletedContactsByUser || {}), ...(parsed.deletedContactsByUser || {}) },
+        calendarByUser: { ...(appConfig.calendarByUser || {}), ...(parsed.calendarByUser || {}) },
+        todosByUser: { ...(appConfig.todosByUser || {}), ...(parsed.todosByUser || {}) }
       };
     } catch (e) {
       console.error(`Erro ao carregar ${file}:`, e.message);
@@ -464,6 +472,313 @@ app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
     }
 
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================
+// Contacts Endpoints
+// ========================
+function getActiveUserKey() {
+  return (appConfig.imap?.user || 'default').trim().toLowerCase();
+}
+
+app.get('/api/contacts', (req, res) => {
+  const userKey = getActiveUserKey();
+  const list = (appConfig.contactsByUser && appConfig.contactsByUser[userKey]) || [];
+  res.json({ success: true, contacts: list });
+});
+
+app.post('/api/contacts/sync', async (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const serverContacts = await imapService.extractContactsFromServer(100);
+
+    appConfig.contactsByUser = appConfig.contactsByUser || {};
+    appConfig.deletedContactsByUser = appConfig.deletedContactsByUser || {};
+
+    const existing = appConfig.contactsByUser[userKey] || [];
+    const deletedSet = new Set((appConfig.deletedContactsByUser[userKey] || []).map(e => e.toLowerCase()));
+    const mergedMap = new Map();
+
+    existing.forEach(c => {
+      if (c && c.email) mergedMap.set(c.email.toLowerCase(), c);
+    });
+
+    let addedCount = 0;
+    serverContacts.forEach(sc => {
+      const em = sc.email.toLowerCase();
+      if (deletedSet.has(em)) return;
+      if (!mergedMap.has(em)) {
+        mergedMap.set(em, sc);
+        addedCount++;
+      } else {
+        const cur = mergedMap.get(em);
+        if ((!cur.name || cur.name === em.split('@')[0]) && sc.name) {
+          cur.name = sc.name;
+        }
+      }
+    });
+
+    const finalContacts = Array.from(mergedMap.values()).sort((a, b) =>
+      (a.name || a.email).localeCompare(b.name || b.email, 'pt-BR')
+    );
+
+    appConfig.contactsByUser[userKey] = finalContacts;
+    saveConfigSafe(appConfig);
+
+    res.json({
+      success: true,
+      added: addedCount,
+      total: finalContacts.length,
+      contacts: finalContacts
+    });
+  } catch (err) {
+    console.error('[Contacts Sync Error]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/contacts', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const email = (req.body.email || '').trim().toLowerCase();
+    const name = (req.body.name || '').trim();
+    const phone = (req.body.phone || '').trim();
+    const company = (req.body.company || '').trim();
+    const originalEmail = (req.body.originalEmail || '').trim().toLowerCase();
+
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Informe um endereço de e-mail válido.' });
+    }
+
+    appConfig.contactsByUser = appConfig.contactsByUser || {};
+    appConfig.deletedContactsByUser = appConfig.deletedContactsByUser || {};
+
+    let list = appConfig.contactsByUser[userKey] || [];
+
+    // Remove old entry if editing email
+    if (originalEmail && originalEmail !== email) {
+      list = list.filter(c => c.email.toLowerCase() !== originalEmail);
+    }
+
+    const idx = list.findIndex(c => c.email.toLowerCase() === email);
+    const contactObj = {
+      email,
+      name: name || email.split('@')[0],
+      phone,
+      company,
+      source: 'manual'
+    };
+
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...contactObj };
+    } else {
+      list.push(contactObj);
+    }
+
+    // Remove from deleted list if user explicitly re-adds it
+    if (Array.isArray(appConfig.deletedContactsByUser[userKey])) {
+      appConfig.deletedContactsByUser[userKey] = appConfig.deletedContactsByUser[userKey].filter(
+        e => e.toLowerCase() !== email
+      );
+    }
+
+    list.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'pt-BR'));
+    appConfig.contactsByUser[userKey] = list;
+    saveConfigSafe(appConfig);
+
+    res.json({ success: true, contacts: list, contact: contactObj });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/contacts', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const email = (req.query.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'E-mail não informado.' });
+    }
+
+    appConfig.contactsByUser = appConfig.contactsByUser || {};
+    appConfig.deletedContactsByUser = appConfig.deletedContactsByUser || {};
+
+    const list = (appConfig.contactsByUser[userKey] || []).filter(c => c.email.toLowerCase() !== email);
+    appConfig.contactsByUser[userKey] = list;
+
+    const deletedList = appConfig.deletedContactsByUser[userKey] || [];
+    if (!deletedList.includes(email)) deletedList.push(email);
+    appConfig.deletedContactsByUser[userKey] = deletedList;
+
+    saveConfigSafe(appConfig);
+    res.json({ success: true, contacts: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================
+// Calendar Events Endpoints
+// ========================
+app.get('/api/calendar', (req, res) => {
+  const userKey = getActiveUserKey();
+  const events = (appConfig.calendarByUser && appConfig.calendarByUser[userKey]) || [];
+  res.json({ success: true, events });
+});
+
+app.post('/api/calendar', async (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const {
+      id,
+      title,
+      date,
+      startTime = '09:00',
+      endTime = '10:00',
+      location = '',
+      description = '',
+      color = '#0078d4',
+      attendees = '',
+      sendInvite = false
+    } = req.body;
+
+    if (!title || !date) {
+      return res.status(400).json({ success: false, error: 'Informe o título e a data do evento.' });
+    }
+
+    appConfig.calendarByUser = appConfig.calendarByUser || {};
+    const list = appConfig.calendarByUser[userKey] || [];
+    const eventId = id || ('evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7));
+
+    const eventObj = {
+      id: eventId,
+      title: String(title).trim(),
+      date: String(date).trim(),
+      startTime: String(startTime).trim(),
+      endTime: String(endTime).trim(),
+      location: String(location).trim(),
+      description: String(description).trim(),
+      color: color || '#0078d4',
+      attendees: String(attendees).trim()
+    };
+
+    const idx = list.findIndex(ev => ev.id === eventId);
+    if (idx >= 0) {
+      list[idx] = eventObj;
+    } else {
+      list.push(eventObj);
+    }
+
+    list.sort((a, b) => `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`));
+    appConfig.calendarByUser[userKey] = list;
+    saveConfigSafe(appConfig);
+
+    // Optional SMTP invite notification
+    if (sendInvite && eventObj.attendees && smtpService) {
+      const formattedDate = eventObj.date.split('-').reverse().join('/');
+      const inviteHtml = `
+        <div style="font-family: Arial, sans-serif; font-size: 14px; color: #201f1e; border-left: 4px solid ${eventObj.color}; padding-left: 14px;">
+          <h3 style="margin: 0 0 8px 0; color: ${eventObj.color};">Convite de Evento: ${eventObj.title}</h3>
+          <p style="margin: 4px 0;"><strong>Data:</strong> ${formattedDate}</p>
+          <p style="margin: 4px 0;"><strong>Horário:</strong> ${eventObj.startTime} às ${eventObj.endTime}</p>
+          ${eventObj.location ? `<p style="margin: 4px 0;"><strong>Local / Link:</strong> ${eventObj.location}</p>` : ''}
+          ${eventObj.description ? `<p style="margin: 8px 0 0 0;">${eventObj.description}</p>` : ''}
+        </div>
+      `;
+      smtpService.sendMail({
+        to: eventObj.attendees,
+        subject: `Convite: ${eventObj.title} (${formattedDate} ${eventObj.startTime})`,
+        html: inviteHtml,
+        text: `Convite: ${eventObj.title}\nData: ${formattedDate}\nHorário: ${eventObj.startTime} - ${eventObj.endTime}\nLocal: ${eventObj.location}\n${eventObj.description}`
+      }).catch(e => console.warn('[Calendar Invite SMTP warn]:', e.message));
+    }
+
+    res.json({ success: true, event: eventObj, events: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/calendar/:id', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const id = req.params.id;
+    appConfig.calendarByUser = appConfig.calendarByUser || {};
+    const list = (appConfig.calendarByUser[userKey] || []).filter(ev => ev.id !== id);
+    appConfig.calendarByUser[userKey] = list;
+    saveConfigSafe(appConfig);
+    res.json({ success: true, events: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================
+// To Do Tasks Endpoints
+// ========================
+app.get('/api/todos', (req, res) => {
+  const userKey = getActiveUserKey();
+  const todos = (appConfig.todosByUser && appConfig.todosByUser[userKey]) || [];
+  res.json({ success: true, todos });
+});
+
+app.post('/api/todos', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const {
+      id,
+      title,
+      dueDate = '',
+      important = false,
+      completed = false,
+      notes = ''
+    } = req.body;
+
+    if (!title || !String(title).trim()) {
+      return res.status(400).json({ success: false, error: 'Informe o título da tarefa.' });
+    }
+
+    appConfig.todosByUser = appConfig.todosByUser || {};
+    const list = appConfig.todosByUser[userKey] || [];
+    const taskId = id || ('todo_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7));
+
+    const existingIdx = list.findIndex(t => t.id === taskId);
+    const taskObj = {
+      id: taskId,
+      title: String(title).trim(),
+      dueDate: String(dueDate || '').trim(),
+      important: !!important,
+      completed: !!completed,
+      notes: String(notes || '').trim(),
+      createdAt: existingIdx >= 0 ? (list[existingIdx].createdAt || new Date().toISOString()) : new Date().toISOString()
+    };
+
+    if (existingIdx >= 0) {
+      list[existingIdx] = taskObj;
+    } else {
+      list.unshift(taskObj);
+    }
+
+    appConfig.todosByUser[userKey] = list;
+    saveConfigSafe(appConfig);
+    res.json({ success: true, todo: taskObj, todos: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/todos/:id', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const id = req.params.id;
+    appConfig.todosByUser = appConfig.todosByUser || {};
+    const list = (appConfig.todosByUser[userKey] || []).filter(t => t.id !== id);
+    appConfig.todosByUser[userKey] = list;
+    saveConfigSafe(appConfig);
+    res.json({ success: true, todos: list });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
