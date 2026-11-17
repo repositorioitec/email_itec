@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3.6.0">
 </head>
 
 <body>
@@ -14,6 +14,10 @@
   <!-- Top Navigation Bar (Outlook Header) -->
   <header class="topbar">
     <div class="topbar-left">
+      <button type="button" class="topbar-btn mobile-only-btn" id="btnMobileFolders" title="Pastas de e-mail"
+        aria-label="Abrir menu de pastas">
+        <i class="fa-solid fa-bars"></i>
+      </button>
       <button class="waffle-btn" title="Iniciador de aplicativos">
         <i class="fa-solid fa-grip-dots"></i>
       </button>
@@ -125,6 +129,9 @@
       </div>
     </aside>
 
+    <!-- Mobile Backdrop for Folders Drawer -->
+    <div class="mobile-drawer-backdrop" id="mobileDrawerBackdrop"></div>
+
     <!-- Folders Navigation Pane -->
     <nav class="folders-pane" id="foldersPane">
       <div class="folder-section">
@@ -219,6 +226,11 @@
         <div class="reading-content" id="readingContentView" style="display: none;">
           <div class="reading-actionbar">
             <div class="actionbar-left">
+              <button type="button" class="action-btn mobile-back-btn" id="btnMobileBackToList"
+                title="Voltar para a lista de e-mails">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>Voltar</span>
+              </button>
               <button class="action-btn primary" id="btnReply">
                 <i class="fa-solid fa-reply"></i>
                 <span>Responder</span>
@@ -429,53 +441,6 @@
           <i class="fa-solid fa-plus" style="color: var(--ms-blue); font-size: 15px;"></i>
           <input type="text" id="todoQuickTitle" class="todo-add-input"
             placeholder="Adicionar uma tarefa... (Pressione Enter para salvar)" required>
-          <input type="date" id="todoQuickDate" class="todo-add-date" title="Data de conclusão (opcional)">
-          <button type="button" id="todoQuickStar" class="todo-star-btn" title="Marcar como importante">
-            <i class="fa-regular fa-star"></i>
-          </button>
-          <button type="submit" class="action-btn primary">Adicionar</button>
-        </form>
-
-        <div class="todo-list-scroll" id="todoListContainer">
-          <!-- Tasks rendered dynamically -->
-        </div>
-      </div>
-    </section>
-
-    <!-- Microsoft To Do Tasks View (Hidden until To Do icon is clicked) -->
-    <section class="todo-view" id="todoView" style="display: none;">
-      <aside class="todo-sidebar">
-        <div class="todo-sidebar-title">Listas de Tarefas</div>
-        <button type="button" class="todo-nav-item active" data-todo-filter="today">
-          <div class="todo-nav-left"><i class="fa-regular fa-sun" style="color: #0078d4;"></i><span>Meu Dia</span></div>
-          <span class="todo-nav-count" id="todoCountToday">0</span>
-        </button>
-        <button type="button" class="todo-nav-item" data-todo-filter="important">
-          <div class="todo-nav-left"><i class="fa-regular fa-star" style="color: #d83b01;"></i><span>Importante</span></div>
-          <span class="todo-nav-count" id="todoCountImportant">0</span>
-        </button>
-        <button type="button" class="todo-nav-item" data-todo-filter="all">
-          <div class="todo-nav-left"><i class="fa-solid fa-list-check" style="color: #107c41;"></i><span>Todas as Tarefas</span></div>
-          <span class="todo-nav-count" id="todoCountAll">0</span>
-        </button>
-        <button type="button" class="todo-nav-item" data-todo-filter="completed">
-          <div class="todo-nav-left"><i class="fa-regular fa-circle-check" style="color: #605e5c;"></i><span>Concluídas</span></div>
-          <span class="todo-nav-count" id="todoCountCompleted">0</span>
-        </button>
-      </aside>
-
-      <div class="todo-main">
-        <div class="todo-main-header">
-          <div>
-            <h2 id="todoListTitle" style="font-size: 22px; font-weight: 700; color: #0078d4; margin: 0;">Meu Dia</h2>
-            <span id="todoListSubtitle" style="font-size: 12px; color: var(--text-secondary);"></span>
-          </div>
-        </div>
-
-        <!-- Quick Add Task Form -->
-        <form class="todo-add-bar" id="todoAddForm">
-          <i class="fa-solid fa-plus" style="color: var(--ms-blue); font-size: 15px;"></i>
-          <input type="text" id="todoQuickTitle" class="todo-add-input" placeholder="Adicionar uma tarefa... (Pressione Enter para salvar)" required>
           <input type="date" id="todoQuickDate" class="todo-add-date" title="Data de conclusão (opcional)">
           <button type="button" id="todoQuickStar" class="todo-star-btn" title="Marcar como importante">
             <i class="fa-regular fa-star"></i>
@@ -1141,7 +1106,7 @@
     <span id="toastMessage">Operação realizada com sucesso!</span>
   </div>
 
-  <script src="app.js?v=3.4.0"></script>
+  <script src="app.js?v=3.6.0"></script>
 </body>
 
 </html>

@@ -180,7 +180,10 @@
 
     // Show login screen on startup unless already authenticated in this browser tab session
     const isSessionAuth = sessionStorage.getItem('outlook_session_auth') === 'true';
-    if (isSessionAuth) {
+    const savedLastActivity = Number(sessionStorage.getItem('outlook_last_activity') || 0);
+    const isExpiredByInactivity = savedLastActivity > 0 && (Date.now() - savedLastActivity >= INACTIVITY_LIMIT_MS);
+
+    if (isSessionAuth && !isExpiredByInactivity) {
       if (elLoginOverlay) elLoginOverlay.style.display = 'none';
       await loadFolders();
       await loadMessages();
@@ -188,6 +191,9 @@
       loadCalendarEvents();
       loadTodos();
       startAutoSync();
+      startInactivityMonitor();
+    } else if (isSessionAuth && isExpiredByInactivity) {
+      endUserSession('Sessão encerrada automaticamente após 30 minutos de inatividade.');
     } else {
       showLoginScreen();
     }
@@ -258,10 +264,129 @@
     box.style.display = 'block';
   }
 
-  function showLoginScreen() {
+  const INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
+  let lastActivityTime = Date.now();
+  let inactivityCheckTimer = null;
+  let lastActivityStorageWrite = 0;
+
+  function startInactivityMonitor() {
+    const now = Date.now();
+    lastActivityTime = now;
+    lastActivityStorageWrite = now;
+    try {
+      sessionStorage.setItem('outlook_last_activity', String(now));
+    } catch (e) {}
+
+    if (inactivityCheckTimer) clearInterval(inactivityCheckTimer);
+    inactivityCheckTimer = setInterval(checkInactivityTimeout, 15000);
+  }
+
+  function stopInactivityMonitor() {
+    if (inactivityCheckTimer) {
+      clearInterval(inactivityCheckTimer);
+      inactivityCheckTimer = null;
+    }
+  }
+
+  function checkInactivityTimeout() {
+    if (sessionStorage.getItem('outlook_session_auth') !== 'true') return;
+    const stored = Number(sessionStorage.getItem('outlook_last_activity') || 0);
+    if (stored > lastActivityTime) {
+      lastActivityTime = stored;
+    }
+    if (Date.now() - lastActivityTime >= INACTIVITY_LIMIT_MS) {
+      endUserSession('Sessão encerrada automaticamente após 30 minutos de inatividade.');
+    }
+  }
+
+  function handleUserActivity() {
+    if (sessionStorage.getItem('outlook_session_auth') !== 'true') return;
+    if (elLoginOverlay && elLoginOverlay.style.display === 'flex') return;
+
+    const now = Date.now();
+    const stored = Number(sessionStorage.getItem('outlook_last_activity') || 0);
+    if (stored > lastActivityTime) {
+      lastActivityTime = stored;
+    }
+
+    if (now - lastActivityTime >= INACTIVITY_LIMIT_MS) {
+      endUserSession('Sessão encerrada automaticamente após 30 minutos de inatividade.');
+      return;
+    }
+
+    lastActivityTime = now;
+    if (now - lastActivityStorageWrite > 2000) {
+      lastActivityStorageWrite = now;
+      try {
+        sessionStorage.setItem('outlook_last_activity', String(now));
+      } catch (e) {}
+    }
+  }
+
+  function toggleMobileFoldersDrawer(forceState) {
+    const foldersPane = document.getElementById('foldersPane');
+    const backdrop = document.getElementById('mobileDrawerBackdrop');
+    if (!foldersPane) return;
+    const nextState = typeof forceState === 'boolean' ? forceState : !foldersPane.classList.contains('mobile-open');
+    foldersPane.classList.toggle('mobile-open', nextState);
+    if (backdrop) backdrop.classList.toggle('mobile-open', nextState);
+  }
+
+  function closeMobileReadingPane() {
+    document.body.classList.remove('mobile-reading-open');
+  }
+
+  function endUserSession(reasonMessage = '') {
+    sessionStorage.removeItem('outlook_session_auth');
+    sessionStorage.removeItem('outlook_session_user');
+    sessionStorage.removeItem('outlook_session_pass_b64');
+    sessionStorage.removeItem('outlook_last_activity');
+
+    if (autoSyncTimer) {
+      clearInterval(autoSyncTimer);
+      autoSyncTimer = null;
+    }
+    stopInactivityMonitor();
+    toggleMobileFoldersDrawer(false);
+    closeMobileReadingPane();
+
+    // Close open modals and menus
+    if (elSettingsModal) elSettingsModal.style.display = 'none';
+    if (elComposeModal) elComposeModal.style.display = 'none';
+    const profileMenu = document.getElementById('userProfileMenu');
+    if (profileMenu) profileMenu.style.display = 'none';
+    const attModal = document.getElementById('attPreviewModal');
+    if (attModal) attModal.style.display = 'none';
+    const contactModal = document.getElementById('contactModal');
+    if (contactModal) contactModal.style.display = 'none';
+    const calModal = document.getElementById('calendarEventModal');
+    if (calModal) calModal.style.display = 'none';
+
+    // Clear active mailbox UI behind the login screen
+    messages = [];
+    selectedMessage = null;
+    selectedUids.clear();
+    if (elMessageListScroll) elMessageListScroll.innerHTML = '';
+    if (elReadingContentView) elReadingContentView.style.display = 'none';
+    if (elNoSelectionView) elNoSelectionView.style.display = 'flex';
+
+    showLoginScreen(reasonMessage);
+    if (reasonMessage) {
+      showToast(reasonMessage);
+    }
+  }
+
+  function showLoginScreen(reasonMessage = '') {
     if (!elLoginOverlay) return;
     elLoginOverlay.style.display = 'flex';
-    if (elLoginErrorBox) elLoginErrorBox.style.display = 'none';
+    if (elLoginErrorBox) {
+      if (reasonMessage) {
+        elLoginErrorBox.style.display = 'block';
+        elLoginErrorBox.innerHTML = `<i class="fa-regular fa-clock"></i> ${escapeHtml(reasonMessage)}`;
+      } else {
+        elLoginErrorBox.style.display = 'none';
+      }
+    }
     if (elLoginEmailInput) elLoginEmailInput.value = '';
     if (elLoginPasswordInput) elLoginPasswordInput.value = '';
 
@@ -327,6 +452,7 @@
         loadCalendarEvents();
         loadTodos();
         startAutoSync();
+        startInactivityMonitor();
       } else {
         if (elLoginErrorBox) {
           elLoginErrorBox.style.display = 'block';
@@ -470,6 +596,8 @@
     elCurrentFolderTitle.textContent = name || path;
     selectedMessage = null;
     selectedUids.clear();
+    toggleMobileFoldersDrawer(false);
+    closeMobileReadingPane();
 
     // Reset reading view
     const noSel = document.getElementById('noSelectionView');
@@ -630,7 +758,7 @@
       elColHdrSender.textContent = isSentOrDraft ? 'Para / E-mail' : 'De / E-mail';
     }
 
-    const isBottomLayout = readingPaneLayout === 'bottom';
+    const isBottomLayout = readingPaneLayout === 'bottom' && window.innerWidth > 768;
 
     elMessageListScroll.innerHTML = '';
     messages.forEach(msg => {
@@ -770,6 +898,8 @@
 
     try {
       selectedMessage = msg;
+      toggleMobileFoldersDrawer(false);
+      document.body.classList.add('mobile-reading-open');
 
       // 1. Immediately reveal reading pane and hide "No Selection" placeholder
       const noSel = document.getElementById('noSelectionView');
@@ -1161,6 +1291,7 @@
         selectedUids.delete(String(uid));
         if (selectedMessage && String(selectedMessage.uid) === String(uid)) {
           selectedMessage = null;
+          closeMobileReadingPane();
           if (elReadingContentView) elReadingContentView.setAttribute('style', 'display: none !important;');
           if (elNoSelectionView) elNoSelectionView.setAttribute('style', 'display: flex !important;');
         }
@@ -1201,6 +1332,7 @@
         selectedUids.clear();
         if (selectedMessage && uidSet.has(String(selectedMessage.uid))) {
           selectedMessage = null;
+          closeMobileReadingPane();
           if (elReadingContentView) elReadingContentView.setAttribute('style', 'display: none !important;');
           if (elNoSelectionView) elNoSelectionView.setAttribute('style', 'display: flex !important;');
         }
@@ -2111,6 +2243,8 @@
   }
 
   function switchAppSection(section) {
+    toggleMobileFoldersDrawer(false);
+    closeMobileReadingPane();
     const railMail = document.getElementById('railMailBtn');
     const railCalendar = document.getElementById('railCalendarBtn');
     const railContacts = document.getElementById('railContactsBtn');
@@ -2667,6 +2801,40 @@
     if (railContactsBtn) railContactsBtn.onclick = () => switchAppSection('contacts');
     if (railTodoBtn) railTodoBtn.onclick = () => switchAppSection('todo');
 
+    // Mobile Portrait Navigation Controls
+    const btnMobileFolders = document.getElementById('btnMobileFolders');
+    const mobileDrawerBackdrop = document.getElementById('mobileDrawerBackdrop');
+    const btnMobileBackToList = document.getElementById('btnMobileBackToList');
+    if (btnMobileFolders) {
+      btnMobileFolders.onclick = (e) => {
+        e.stopPropagation();
+        const contentSplit = document.getElementById('contentSplit');
+        if (contentSplit && contentSplit.style.display === 'none') {
+          switchAppSection('mail');
+        }
+        toggleMobileFoldersDrawer();
+      };
+    }
+    if (mobileDrawerBackdrop) {
+      mobileDrawerBackdrop.onclick = () => toggleMobileFoldersDrawer(false);
+    }
+    if (btnMobileBackToList) {
+      btnMobileBackToList.onclick = () => closeMobileReadingPane();
+    }
+    if (window.matchMedia) {
+      const mobileMq = window.matchMedia('(max-width: 768px)');
+      const onViewportChange = () => {
+        if (!mobileMq.matches) {
+          toggleMobileFoldersDrawer(false);
+        }
+        if (messages.length > 0) {
+          renderMessageList();
+        }
+      };
+      if (mobileMq.addEventListener) mobileMq.addEventListener('change', onViewportChange);
+      else if (mobileMq.addListener) mobileMq.addListener(onViewportChange);
+    }
+
     // To Do Event Listeners
     const todoAddForm = document.getElementById('todoAddForm');
     const todoQuickStar = document.getElementById('todoQuickStar');
@@ -3120,9 +3288,19 @@
     }
 
     const triggerAccountSwitch = () => {
-      sessionStorage.removeItem('outlook_session_auth');
-      showLoginScreen();
+      endUserSession();
     };
+
+    // 30-minute inactivity auto-logout listeners
+    ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'wheel'].forEach(evtName => {
+      document.addEventListener(evtName, handleUserActivity, { passive: true });
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        checkInactivityTimeout();
+      }
+    });
+    window.addEventListener('focus', checkInactivityTimeout);
 
     const elBtnToggleTheme = document.getElementById('btnToggleTheme');
     const elThemeToggleIcon = document.getElementById('themeToggleIcon');
