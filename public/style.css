@@ -2479,3 +2479,322 @@ border-bottom: 1px solid var(--border-color);
   background: #eff6fc;
   color: var(--ms-blue);
 }
+
+/* =========================================================
+   Theme Toggle Button & Dark Mode
+   ========================================================= */
+.theme-toggle-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.theme-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+body.dark-mode {
+  --ms-blue: #3aa0f3;
+  --ms-blue-hover: #2899f5;
+  --ms-blue-light: #1e3247;
+  --ms-blue-selected: #21405c;
+  --ms-blue-border: #3aa0f3;
+  --topbar-bg: #18232f;
+  --topbar-text: #f3f2f1;
+  --rail-bg: #181a1d;
+  --rail-border: #2b2d30;
+  --folder-bg: #1e2024;
+  --folder-border: #2e3136;
+  --list-bg: #222428;
+  --list-hover: #2c2f34;
+  --list-selected: #293847;
+  --reader-bg: #1c1e22;
+  --text-primary: #e8e6e3;
+  --text-secondary: #b3b0ac;
+  --text-muted: #84817d;
+  --border-color: #32353a;
+  background-color: #16181b;
+  color: var(--text-primary);
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb {
+  background: #484b51;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+  background: #60646b;
+}
+
+body.dark-mode .search-box {
+  background: #2b2e33;
+  border-color: #3c4046;
+}
+
+body.dark-mode .search-box input {
+  color: var(--text-primary);
+}
+
+body.dark-mode .search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+body.dark-mode .ribbon {
+  background: #1f2125;
+  border-bottom-color: var(--border-color);
+}
+
+body.dark-mode .ribbon-btn {
+  color: var(--text-primary);
+}
+
+body.dark-mode .ribbon-btn:hover:not(:disabled) {
+  background: #2d3036;
+}
+
+body.dark-mode .ribbon-divider {
+  background: var(--border-color);
+}
+
+body.dark-mode .rail-btn {
+  color: var(--text-secondary);
+}
+
+body.dark-mode .rail-btn:hover {
+  background: #2a2d32;
+  color: var(--text-primary);
+}
+
+body.dark-mode .rail-btn.active {
+  background: var(--ms-blue-light);
+  color: var(--ms-blue);
+}
+
+body.dark-mode .folder-item,
+body.dark-mode .message-item {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+body.dark-mode .message-list-header,
+body.dark-mode .reading-toolbar,
+body.dark-mode .reading-header,
+body.dark-mode .attachments-bar {
+  background: #202226;
+  border-color: var(--border-color);
+}
+
+body.dark-mode .message-columns-header {
+  background: #1a1c20;
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-color);
+}
+
+body.dark-mode .message-card {
+  background: var(--list-bg);
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+body.dark-mode .message-card:hover {
+  background: var(--list-hover);
+}
+
+body.dark-mode .message-card.active,
+body.dark-mode .message-card.selected {
+  background: var(--list-selected);
+}
+
+body.dark-mode .message-card.checked-row {
+  background-color: #1e3247 !important;
+}
+
+body.dark-mode .message-card .message-row-sender,
+body.dark-mode .message-card .message-row-subject,
+body.dark-mode .message-card .msg-sender,
+body.dark-mode .message-card .msg-subject {
+  color: #e8e6e3;
+}
+
+body.dark-mode .message-card.unread .message-row-sender,
+body.dark-mode .message-card.unread .message-row-subject,
+body.dark-mode .message-card.unread .msg-sender,
+body.dark-mode .message-card.unread .msg-subject {
+  color: #ffffff;
+}
+
+body.dark-mode .message-card .message-row-date,
+body.dark-mode .message-card .message-row-status,
+body.dark-mode .message-card .msg-snippet,
+body.dark-mode .message-card .msg-date {
+  color: #b3b0ac;
+}
+
+body.dark-mode .no-selection {
+  background: var(--reader-bg);
+  color: var(--text-secondary);
+}
+
+body.dark-mode .filter-tab {
+  color: var(--text-secondary);
+}
+
+body.dark-mode .filter-tab:hover {
+  background: #2c2f34;
+  color: var(--text-primary);
+}
+
+body.dark-mode .filter-tab.active {
+  color: var(--ms-blue);
+}
+
+body.dark-mode .action-btn,
+body.dark-mode .attachment-chip,
+body.dark-mode .calendar-nav-btn {
+  background: #2a2d32;
+  color: var(--text-primary);
+  border-color: #3d4147;
+}
+
+body.dark-mode .action-btn:hover,
+body.dark-mode .attachment-chip:hover,
+body.dark-mode .calendar-nav-btn:hover {
+  background: #34383e;
+}
+
+body.dark-mode .email-body-container {
+  background: #ffffff;
+  color: #201f1e;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+body.dark-mode .user-profile-menu,
+body.dark-mode .modal-content,
+body.dark-mode .compose-window,
+body.dark-mode .login-card,
+body.dark-mode .login-autocomplete-box {
+  background: #222428;
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+body.dark-mode .modal-header,
+body.dark-mode .modal-footer,
+body.dark-mode .compose-header,
+body.dark-mode .compose-field,
+body.dark-mode .compose-toolbar,
+body.dark-mode .user-profile-menu-header,
+body.dark-mode .settings-tabs {
+  background: #1b1d20;
+  border-color: var(--border-color);
+}
+
+body.dark-mode .user-profile-menu-item {
+  color: var(--text-primary);
+}
+
+body.dark-mode .user-profile-menu-item:hover {
+  background: #2d3036;
+}
+
+body.dark-mode .settings-tab {
+  color: var(--text-secondary);
+}
+
+body.dark-mode .settings-tab.active {
+  background: #222428;
+  color: var(--ms-blue);
+}
+
+body.dark-mode input[type="text"],
+body.dark-mode input[type="email"],
+body.dark-mode input[type="password"],
+body.dark-mode input[type="number"],
+body.dark-mode input[type="date"],
+body.dark-mode input[type="time"],
+body.dark-mode select,
+body.dark-mode textarea,
+body.dark-mode .compose-editor {
+  background: #2a2d32;
+  color: var(--text-primary);
+  border-color: #3f434a;
+}
+
+body.dark-mode .compose-toolbar button,
+body.dark-mode .compose-toolbar select {
+  background: #2a2d32;
+  color: var(--text-primary);
+  border-color: #3f434a;
+}
+
+body.dark-mode .layout-option-card {
+  background: #26292e;
+  border-color: #3a3e45;
+}
+
+body.dark-mode .layout-option-card.active {
+  background: var(--ms-blue-light);
+  border-color: var(--ms-blue);
+}
+
+body.dark-mode .contacts-view,
+body.dark-mode .calendar-view,
+body.dark-mode .todo-view {
+  background: var(--reader-bg);
+}
+
+body.dark-mode .contacts-header,
+body.dark-mode .contacts-table-header,
+body.dark-mode .calendar-header,
+body.dark-mode .calendar-agenda-pane,
+body.dark-mode .calendar-agenda-header,
+body.dark-mode .todo-sidebar,
+body.dark-mode .todo-main-header {
+  background: #1e2024;
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+body.dark-mode .contact-row,
+body.dark-mode .calendar-day-cell,
+body.dark-mode .calendar-event-card,
+body.dark-mode .todo-add-bar,
+body.dark-mode .todo-item-card {
+  background: #25282c;
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+body.dark-mode .contact-row:hover,
+body.dark-mode .calendar-day-cell:hover,
+body.dark-mode .todo-item-card:hover {
+  background: #2d3036;
+}
+
+body.dark-mode .todo-nav-item {
+  color: var(--text-primary);
+}
+
+body.dark-mode .todo-nav-item:hover {
+  background: #2a2d32;
+}
+
+body.dark-mode .todo-nav-item.active {
+  background: var(--ms-blue-light);
+  color: var(--ms-blue);
+}
+
+body.dark-mode .login-screen {
+  background: linear-gradient(135deg, #10161e 0%, #1a2634 100%);
+}
+
+body.dark-mode .login-autocomplete-item:hover,
+body.dark-mode .login-autocomplete-item.active {
+  background: var(--ms-blue-light);
+  color: var(--ms-blue);
+}
+

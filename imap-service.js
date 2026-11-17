@@ -320,6 +320,7 @@ class ImapService {
     try {
       const list = await client.list();
       const folders = [];
+      const seenByFriendlyName = new Map();
 
       for (const item of list) {
         let unread = 0;
@@ -340,14 +341,30 @@ class ImapService {
         else if (item.specialUse === '\\Trash' || /trash|lixeira|excluídos/i.test(item.name)) friendlyName = 'Itens Excluídos';
         else if (item.specialUse === '\\Archive' || /archive|arquivo/i.test(item.name)) friendlyName = 'Arquivo Morto';
 
-        folders.push({
+        const folderObj = {
           path: item.path,
           name: friendlyName,
           originalName: item.name,
           specialUse: item.specialUse || '',
           unread,
           total
-        });
+        };
+
+        const key = friendlyName.toLowerCase();
+        if (seenByFriendlyName.has(key)) {
+          const existingIdx = seenByFriendlyName.get(key);
+          const existing = folders[existingIdx];
+          const replaceExisting =
+            (folderObj.total > 0 && existing.total === 0) ||
+            (Boolean(folderObj.specialUse) && !existing.specialUse && (folderObj.total > 0 || existing.total === 0));
+          if (replaceExisting) {
+            folders[existingIdx] = folderObj;
+          }
+          continue;
+        }
+
+        seenByFriendlyName.set(key, folders.length);
+        folders.push(folderObj);
       }
 
       return folders;

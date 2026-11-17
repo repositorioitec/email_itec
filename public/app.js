@@ -3124,6 +3124,27 @@
       showLoginScreen();
     };
 
+    const elBtnToggleTheme = document.getElementById('btnToggleTheme');
+    const elThemeToggleIcon = document.getElementById('themeToggleIcon');
+    const applyTheme = (theme) => {
+      const isDark = theme === 'dark';
+      document.body.classList.toggle('dark-mode', isDark);
+      if (elThemeToggleIcon) {
+        elThemeToggleIcon.className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+      }
+      if (elBtnToggleTheme) {
+        elBtnToggleTheme.title = isDark ? 'Alternar para modo claro' : 'Alternar para modo escuro';
+      }
+    };
+    applyTheme(localStorage.getItem('outlook_theme') === 'dark' ? 'dark' : 'light');
+    if (elBtnToggleTheme) {
+      elBtnToggleTheme.onclick = () => {
+        const nextTheme = document.body.classList.contains('dark-mode') ? 'light' : 'dark';
+        localStorage.setItem('outlook_theme', nextTheme);
+        applyTheme(nextTheme);
+      };
+    }
+
     const elUserAvatar = document.getElementById('userAvatar');
     const elUserProfileMenu = document.getElementById('userProfileMenu');
     const elBtnMenuLogout = document.getElementById('btnMenuLogout');
