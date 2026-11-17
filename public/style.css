@@ -2446,3 +2446,36 @@ border-bottom: 1px solid var(--border-color);
 .todo-due-badge.overdue {
   color: #d13438;
 }
+
+/* Login Email Autocomplete Dropdown */
+.login-autocomplete-box {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  background: #ffffff;
+  border: 1px solid #c8c6c4;
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  z-index: 2600;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.login-autocomplete-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.1s;
+}
+
+.login-autocomplete-item:hover,
+.login-autocomplete-item.active {
+  background: #eff6fc;
+  color: var(--ms-blue);
+}

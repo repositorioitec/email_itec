@@ -11,8 +11,8 @@ if not exist node_modules (
   call npm install
 )
 
-echo Abrindo o navegador em http://localhost:3000 ...
-start http://localhost:3000
+echo Abrindo o navegador em http://localhost:4000 ...
+start http://localhost:4000
 
 echo Iniciando servidor Node.js...
 node server.js

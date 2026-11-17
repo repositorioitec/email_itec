@@ -13,7 +13,7 @@ Dê um duplo clique no arquivo:
 ```
 iniciar_sistema.bat
 ```
-O navegador abrirá automaticamente em [http://localhost:3000](http://localhost:3000).
+O navegador abrirá automaticamente em [http://localhost:4000](http://localhost:4000).
 
 ### Opção 2: Via Terminal / Prompt de Comando
 ```bash

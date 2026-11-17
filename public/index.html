@@ -567,14 +567,6 @@
           <i class="fa-solid fa-paperclip"></i> Anexar
           <input type="file" id="composeFileInput" multiple style="display: none;">
         </label>
-        <button type="button" class="format-btn" id="btnInsertSignatureNow"
-          title="Inserir assinatura no corpo do e-mail">
-          <i class="fa-solid fa-signature" style="color: var(--ms-blue);"></i> Assinatura
-        </button>
-        <button type="button" class="format-btn" id="btnOpenSigFromCompose"
-          title="Editar/Criar Assinatura em Configurações">
-          <i class="fa-solid fa-pen-nib"></i>
-        </button>
         <span id="composeAttachedFilesCount" style="font-size: 11px; color: var(--ms-blue); margin-left: 6px;"></span>
       </div>
 
@@ -950,23 +942,16 @@
       </div>
 
       <h2 class="login-heading">Entrar na sua conta</h2>
-      <p class="login-desc">Selecione seu e-mail gravado ou digite um novo endereço para acessar suas mensagens.</p>
+      <p class="login-desc">Digite seu endereço de e-mail e senha para acessar suas mensagens.</p>
 
-      <!-- Saved Email Accounts List -->
-      <div id="savedEmailsSection" style="display: none; margin-bottom: 14px;">
-        <span
-          style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 6px;">
-          Contas salvas neste computador:
-        </span>
-        <div id="savedEmailsList" class="saved-emails-list"></div>
-      </div>
-
-      <form id="loginForm" autocomplete="on">
+      <form id="loginForm" autocomplete="off">
         <div class="form-group">
           <label for="loginEmailInput">Endereço de E-mail:</label>
-          <input type="email" class="form-control" id="loginEmailInput" list="savedEmailsDatalist"
-            placeholder="nome@itecensino.com.br" required autocomplete="username">
-          <datalist id="savedEmailsDatalist"></datalist>
+          <div style="position: relative;">
+            <input type="email" class="form-control" id="loginEmailInput"
+              placeholder="nome@itecensino.com.br" required autocomplete="off">
+            <div id="loginEmailSuggestions" class="login-autocomplete-box" style="display: none;"></div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -1152,7 +1137,7 @@
     <span id="toastMessage">Operação realizada com sucesso!</span>
   </div>
 
-  <script src="app.js?v=3.3.0"></script>
+  <script src="app.js?v=3.4.0"></script>
 </body>
 
 </html>

@@ -9,7 +9,7 @@ const ImapService = require('./imap-service');
 const SmtpService = require('./smtp-service');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 app.use(cors());

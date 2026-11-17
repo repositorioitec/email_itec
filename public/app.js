@@ -219,82 +219,59 @@
     } catch (e) {}
   }
 
-  function renderSavedEmails() {
-    if (!elSavedEmailsList || !elSavedEmailsSection) return;
+  function renderLoginAutocomplete() {
+    const box = document.getElementById('loginEmailSuggestions');
+    if (!box || !elLoginEmailInput) return;
 
-    if (elSavedEmailsDatalist) {
-      elSavedEmailsDatalist.innerHTML = savedEmails.map(em => `<option value="${escapeHtml(em)}"></option>`).join('');
-    }
-
-    if (savedEmails.length === 0) {
-      elSavedEmailsSection.style.display = 'none';
+    const typed = elLoginEmailInput.value.trim().toLowerCase();
+    if (!typed) {
+      box.style.display = 'none';
+      box.innerHTML = '';
       return;
     }
 
-    elSavedEmailsSection.style.display = 'block';
-    elSavedEmailsList.innerHTML = '';
+    const matches = savedEmails.filter(em => em.toLowerCase().includes(typed) && em.toLowerCase() !== typed);
+    if (matches.length === 0) {
+      box.style.display = 'none';
+      box.innerHTML = '';
+      return;
+    }
 
-    const currentTyped = (elLoginEmailInput?.value || '').trim().toLowerCase();
-
-    savedEmails.forEach(email => {
+    box.innerHTML = '';
+    matches.slice(0, 6).forEach((email, idx) => {
       const item = document.createElement('div');
-      item.className = `saved-email-item ${email.toLowerCase() === currentTyped ? 'active' : ''}`;
-      const shortName = email.split('@')[0].replace(/[._-]+/g, ' ');
-
+      item.className = `login-autocomplete-item ${idx === 0 ? 'active' : ''}`;
       item.innerHTML = `
-        <div class="saved-email-left">
-          <div class="saved-email-avatar">${getInitials(shortName)}</div>
-          <span class="saved-email-address">${escapeHtml(email)}</span>
-        </div>
-        <button type="button" class="btn-remove-saved-email" title="Esquecer este e-mail">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
+        <i class="fa-regular fa-envelope" style="color: var(--ms-blue);"></i>
+        <span>${escapeHtml(email)}</span>
       `;
-
-      item.onclick = (e) => {
-        if (e.target.closest('.btn-remove-saved-email')) {
-          e.stopPropagation();
-          removeSavedEmail(email);
-          return;
-        }
-        if (elLoginEmailInput) elLoginEmailInput.value = email;
-        renderSavedEmails();
+      item.onmousedown = (e) => {
+        e.preventDefault();
+        elLoginEmailInput.value = email;
+        box.style.display = 'none';
         if (elLoginPasswordInput) elLoginPasswordInput.focus();
       };
-
-      elSavedEmailsList.appendChild(item);
+      box.appendChild(item);
     });
-  }
 
-  async function removeSavedEmail(emailToRemove) {
-    savedEmails = savedEmails.filter(e => e.toLowerCase() !== emailToRemove.toLowerCase());
-    saveEmailsLocally(savedEmails);
-    renderSavedEmails();
-    try {
-      await fetch(`/api/auth/saved-email?email=${encodeURIComponent(emailToRemove)}`, { method: 'DELETE' });
-    } catch (e) {}
+    box.style.display = 'block';
   }
 
   function showLoginScreen() {
     if (!elLoginOverlay) return;
     elLoginOverlay.style.display = 'flex';
     if (elLoginErrorBox) elLoginErrorBox.style.display = 'none';
+    if (elLoginEmailInput) elLoginEmailInput.value = '';
     if (elLoginPasswordInput) elLoginPasswordInput.value = '';
 
-    // Pre-fill email with the most recent saved email so user doesn't need to retype it
-    const lastEmail = localStorage.getItem('outlook_last_email') || savedEmails[0] || document.getElementById('cfgImapUser')?.value || '';
-    if (elLoginEmailInput && lastEmail) {
-      elLoginEmailInput.value = lastEmail;
+    const box = document.getElementById('loginEmailSuggestions');
+    if (box) {
+      box.style.display = 'none';
+      box.innerHTML = '';
     }
 
-    renderSavedEmails();
-
     setTimeout(() => {
-      if (elLoginEmailInput && !elLoginEmailInput.value) {
-        elLoginEmailInput.focus();
-      } else if (elLoginPasswordInput) {
-        elLoginPasswordInput.focus();
-      }
+      if (elLoginEmailInput) elLoginEmailInput.focus();
     }, 100);
   }
 
@@ -2979,7 +2956,42 @@
     }
 
     if (elLoginEmailInput) {
-      elLoginEmailInput.oninput = () => renderSavedEmails();
+      elLoginEmailInput.oninput = () => renderLoginAutocomplete();
+      elLoginEmailInput.onblur = () => {
+        setTimeout(() => {
+          const box = document.getElementById('loginEmailSuggestions');
+          if (box) box.style.display = 'none';
+        }, 150);
+      };
+      elLoginEmailInput.onkeydown = (e) => {
+        const box = document.getElementById('loginEmailSuggestions');
+        if (!box || box.style.display === 'none') return;
+        const items = Array.from(box.querySelectorAll('.login-autocomplete-item'));
+        if (items.length === 0) return;
+
+        let activeIdx = items.findIndex(el => el.classList.contains('active'));
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (activeIdx >= 0) items[activeIdx].classList.remove('active');
+          activeIdx = (activeIdx + 1) % items.length;
+          items[activeIdx].classList.add('active');
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (activeIdx >= 0) items[activeIdx].classList.remove('active');
+          activeIdx = (activeIdx - 1 + items.length) % items.length;
+          items[activeIdx].classList.add('active');
+        } else if (e.key === 'Tab' || (e.key === 'Enter' && activeIdx >= 0)) {
+          e.preventDefault();
+          const chosen = items[activeIdx >= 0 ? activeIdx : 0].querySelector('span')?.textContent;
+          if (chosen) {
+            elLoginEmailInput.value = chosen;
+            box.style.display = 'none';
+            if (elLoginPasswordInput) elLoginPasswordInput.focus();
+          }
+        } else if (e.key === 'Escape') {
+          box.style.display = 'none';
+        }
+      };
     }
 
     const triggerAccountSwitch = () => {
