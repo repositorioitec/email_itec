@@ -362,6 +362,31 @@ app.get('/api/imap/message/:uid', async (req, res) => {
   }
 });
 
+// Download or preview single attachment
+app.get('/api/imap/attachment/:uid/:partId', async (req, res) => {
+  try {
+    const folder = req.query.folder || 'INBOX';
+    const uid = req.params.uid;
+    const partId = req.params.partId;
+    const isDownload = req.query.download === '1' || req.query.download === 'true';
+
+    const att = await imapService.getAttachment(folder, uid, partId);
+    if (!att || !att.content) {
+      return res.status(404).json({ success: false, error: 'Anexo não encontrado' });
+    }
+
+    const safeFilename = encodeURIComponent(att.filename).replace(/['()]/g, escape).replace(/\*/g, '%2A');
+    const disposition = isDownload ? 'attachment' : 'inline';
+
+    res.setHeader('Content-Type', att.contentType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${safeFilename}`);
+    res.send(att.content);
+  } catch (err) {
+    console.error(`[API /api/imap/attachment] Erro:`, err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Update flags (seen, flagged)
 app.post('/api/imap/flags', async (req, res) => {
   try {

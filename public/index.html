@@ -206,7 +206,7 @@
               <span>Encaminhar</span>
             </button>
           </div>
-          <div>
+          <div style="display: flex; align-items: center; gap: 6px;">
             <button class="action-btn" id="btnDeleteCurrent" title="Excluir">
               <i class="fa-regular fa-trash-can"></i>
             </button>
@@ -215,6 +215,10 @@
             </button>
             <button class="action-btn" id="btnFlagCurrent" title="Sinalizar">
               <i class="fa-regular fa-flag"></i>
+            </button>
+            <button class="action-btn" id="btnMaximizeReader" title="Maximizar mensagem na tela">
+              <i class="fa-solid fa-expand"></i>
+              <span>Maximizar</span>
             </button>
           </div>
         </div>
@@ -280,9 +284,38 @@
 
       <!-- Formatting Toolbar -->
       <div class="compose-toolbar">
+        <select id="composeFontFamily" class="compose-select" title="Tipo de fonte" style="width: 120px;">
+          <option value="Arial, Helvetica, sans-serif" selected>Arial</option>
+          <option value="Calibri, sans-serif">Calibri</option>
+          <option value="'Segoe UI', Tahoma, sans-serif">Segoe UI</option>
+          <option value="Tahoma, sans-serif">Tahoma</option>
+          <option value="Verdana, sans-serif">Verdana</option>
+          <option value="Georgia, serif">Georgia</option>
+          <option value="'Times New Roman', Times, serif">Times New Roman</option>
+          <option value="'Courier New', Courier, monospace">Courier New</option>
+        </select>
+        <select id="composeFontSize" class="compose-select" title="Tamanho da fonte" style="width: 58px;">
+          <option value="10">10</option>
+          <option value="11">11</option>
+          <option value="12">12</option>
+          <option value="13">13</option>
+          <option value="14">14</option>
+          <option value="15" selected>15</option>
+          <option value="16">16</option>
+          <option value="18">18</option>
+          <option value="20">20</option>
+          <option value="24">24</option>
+          <option value="28">28</option>
+          <option value="32">32</option>
+        </select>
+        <div class="ribbon-divider" style="height: 18px;"></div>
         <button type="button" class="format-btn" onclick="document.execCommand('bold', false, null)" title="Negrito (Ctrl+B)"><b>N</b></button>
         <button type="button" class="format-btn" onclick="document.execCommand('italic', false, null)" title="Itálico (Ctrl+I)"><i>I</i></button>
         <button type="button" class="format-btn" onclick="document.execCommand('underline', false, null)" title="Sublinhado (Ctrl+U)"><u>S</u></button>
+        <label class="format-btn" style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer;" title="Cor do texto">
+          <i class="fa-solid fa-font" style="border-bottom: 2px solid #0078d4; padding-bottom: 1px;"></i>
+          <input type="color" id="composeTextColor" value="#201f1e" style="width: 14px; height: 14px; border: none; padding: 0; background: none; cursor: pointer;">
+        </label>
         <div class="ribbon-divider" style="height: 18px;"></div>
         <button type="button" class="format-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista com marcadores"><i class="fa-solid fa-list-ul"></i></button>
         <button type="button" class="format-btn" onclick="document.execCommand('insertOrderedList', false, null)" title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
@@ -682,7 +715,7 @@
     <span id="toastMessage">Operação realizada com sucesso!</span>
   </div>
 
-  <script src="app.js?v=2.6.0"></script>
+  <script src="app.js?v=2.7.1"></script>
 </body>
 </html>
 

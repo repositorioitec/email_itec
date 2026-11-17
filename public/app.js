@@ -793,6 +793,134 @@
     }
   }
 
+  let activeAttBlobUrl = null;
+
+  function getAttachmentIcon(filename, contentType) {
+    const fn = (filename || '').toLowerCase();
+    const ct = (contentType || '').toLowerCase();
+    if (ct.includes('pdf') || fn.endsWith('.pdf')) return 'fa-regular fa-file-pdf" style="color: #d13438;';
+    if (ct.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(fn)) return 'fa-regular fa-file-image" style="color: #0078d4;';
+    if (/\.(xls|xlsx|csv)$/.test(fn)) return 'fa-regular fa-file-excel" style="color: #107c41;';
+    if (/\.(doc|docx)$/.test(fn)) return 'fa-regular fa-file-word" style="color: #2b579a;';
+    if (/\.(zip|rar|7z)$/.test(fn)) return 'fa-regular fa-file-zipper" style="color: #ca5010;';
+    return 'fa-regular fa-file';
+  }
+
+  async function fetchAttachmentBlob(msg, att, download = false) {
+    const targetFolder = msg.folder || currentFolder || 'INBOX';
+    const url = `/api/imap/attachment/${msg.uid}/${att.partId}?folder=${encodeURIComponent(targetFolder)}${download ? '&download=1' : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Falha ao carregar anexo do servidor');
+    return await res.blob();
+  }
+
+  async function downloadAttachment(msg, att) {
+    try {
+      showToast(`Baixando ${att.filename}...`);
+      const blob = await fetchAttachmentBlob(msg, att, true);
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = att.filename || 'anexo';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+      showToast(`Download concluído: ${att.filename}`);
+    } catch (err) {
+      alert('Não foi possível baixar o anexo: ' + err.message);
+    }
+  }
+
+  async function previewAttachment(msg, att) {
+    const modal = document.getElementById('attachmentPreviewModal');
+    const titleEl = document.getElementById('attPreviewTitle');
+    const sizeEl = document.getElementById('attPreviewSize');
+    const bodyEl = document.getElementById('attPreviewBody');
+    const btnDl = document.getElementById('btnAttPreviewDownload');
+    const btnClose = document.getElementById('btnCloseAttPreview');
+
+    if (!modal || !bodyEl) {
+      downloadAttachment(msg, att);
+      return;
+    }
+
+    if (activeAttBlobUrl) {
+      URL.revokeObjectURL(activeAttBlobUrl);
+      activeAttBlobUrl = null;
+    }
+
+    if (titleEl) titleEl.textContent = att.filename || 'Anexo';
+    if (sizeEl) sizeEl.textContent = `(${formatBytes(att.size)})`;
+    bodyEl.innerHTML = '<div style="text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 28px; color: var(--ms-blue); margin-bottom: 10px;"></i><p>Carregando visualização do anexo...</p></div>';
+    modal.style.display = 'flex';
+
+    if (btnDl) btnDl.onclick = () => downloadAttachment(msg, att);
+
+    const closeModal = () => {
+      modal.style.display = 'none';
+      bodyEl.innerHTML = '';
+      if (activeAttBlobUrl) {
+        URL.revokeObjectURL(activeAttBlobUrl);
+        activeAttBlobUrl = null;
+      }
+    };
+    if (btnClose) btnClose.onclick = closeModal;
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
+
+    try {
+      const blob = await fetchAttachmentBlob(msg, att, false);
+      const ct = (att.contentType || blob.type || '').toLowerCase();
+      const fn = (att.filename || '').toLowerCase();
+
+      // Fix generic octet-stream MIME for PDF/images by extension
+      let effectiveBlob = blob;
+      if (ct === 'application/octet-stream' || !ct) {
+        if (fn.endsWith('.pdf')) effectiveBlob = new Blob([blob], { type: 'application/pdf' });
+        else if (/\.(png)$/.test(fn)) effectiveBlob = new Blob([blob], { type: 'image/png' });
+        else if (/\.(jpg|jpeg)$/.test(fn)) effectiveBlob = new Blob([blob], { type: 'image/jpeg' });
+        else if (fn.endsWith('.gif')) effectiveBlob = new Blob([blob], { type: 'image/gif' });
+        else if (fn.endsWith('.webp')) effectiveBlob = new Blob([blob], { type: 'image/webp' });
+        else if (/\.(txt|csv|log)$/.test(fn)) effectiveBlob = new Blob([blob], { type: 'text/plain; charset=utf-8' });
+      }
+
+      activeAttBlobUrl = URL.createObjectURL(effectiveBlob);
+      const isImage = effectiveBlob.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(fn);
+      const isPdf = effectiveBlob.type.includes('pdf') || fn.endsWith('.pdf');
+      const isText = effectiveBlob.type.startsWith('text/') || /\.(txt|csv|json|xml|log)$/.test(fn);
+
+      if (isImage) {
+        bodyEl.innerHTML = `<img src="${activeAttBlobUrl}" alt="${escapeHtml(att.filename)}" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);">`;
+      } else if (isPdf) {
+        bodyEl.innerHTML = `<iframe src="${activeAttBlobUrl}" style="width: 100%; height: 100%; border: none; border-radius: 4px; background: #fff;"></iframe>`;
+      } else if (isText) {
+        const textContent = await effectiveBlob.text();
+        bodyEl.innerHTML = `<pre style="width: 100%; height: 100%; margin: 0; padding: 16px; background: #fff; border-radius: 4px; overflow: auto; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap;">${escapeHtml(textContent)}</pre>`;
+      } else {
+        bodyEl.innerHTML = `
+          <div style="background: #fff; padding: 32px 40px; border-radius: 8px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 420px;">
+            <i class="${getAttachmentIcon(att.filename, att.contentType)}" style="font-size: 48px; margin-bottom: 14px; display: block;"></i>
+            <h4 style="font-size: 15px; margin-bottom: 6px; word-break: break-word;">${escapeHtml(att.filename)}</h4>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 18px;">
+              Tamanho: ${formatBytes(att.size)}<br>
+              Pré-visualização direta indisponível para este formato no navegador.
+            </p>
+            <button type="button" class="action-btn primary" id="btnAttFallbackDownload" style="margin: 0 auto;">
+              <i class="fa-solid fa-download"></i>
+              <span>Baixar no Computador</span>
+            </button>
+          </div>
+        `;
+        const btnFallback = document.getElementById('btnAttFallbackDownload');
+        if (btnFallback) btnFallback.onclick = () => downloadAttachment(msg, att);
+      }
+    } catch (err) {
+      bodyEl.innerHTML = `<div style="color: #a80000; padding: 20px;"><i class="fa-solid fa-circle-exclamation"></i> Erro ao visualizar anexo: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
   function renderReadingDetail(msg) {
     if (!msg) return;
 
@@ -803,12 +931,22 @@
       msg.attachments.forEach(att => {
         const chip = document.createElement('div');
         chip.className = 'attachment-chip';
+        chip.title = 'Clique para visualizar ou baixe no ícone ao lado';
         chip.innerHTML = `
-          <i class="fa-regular fa-file"></i>
+          <i class="${getAttachmentIcon(att.filename, att.contentType)}"></i>
           <span><strong>${escapeHtml(att.filename)}</strong> (${formatBytes(att.size)})</span>
-          <i class="fa-solid fa-download" style="color: var(--ms-blue); margin-left: 4px;"></i>
+          <button type="button" class="card-action-btn btn-att-dl" title="Baixar no computador" style="margin-left: 4px; color: var(--ms-blue);">
+            <i class="fa-solid fa-download"></i>
+          </button>
         `;
-        chip.onclick = () => showToast(`Anexo: ${att.filename} (${formatBytes(att.size)})`);
+        chip.onclick = (e) => {
+          if (e.target.closest('.btn-att-dl')) {
+            e.stopPropagation();
+            downloadAttachment(msg, att);
+            return;
+          }
+          previewAttachment(msg, att);
+        };
         elAttachmentsChips.appendChild(chip);
       });
     } else {
@@ -1183,6 +1321,14 @@
       }
     }
 
+    // Reset default editor font to Arial 15px
+    const selFontFamily = document.getElementById('composeFontFamily');
+    const selFontSize = document.getElementById('composeFontSize');
+    if (selFontFamily) selFontFamily.value = 'Arial, Helvetica, sans-serif';
+    if (selFontSize) selFontSize.value = '15';
+    elComposeEditor.style.fontFamily = 'Arial, Helvetica, sans-serif';
+    elComposeEditor.style.fontSize = '15px';
+
     elComposeEditor.innerHTML = finalBody;
     attachedFiles = [];
     elComposeAttachedFilesCount.textContent = '';
@@ -1212,11 +1358,15 @@
     elBtnSendMail.disabled = true;
     elComposeStatusMsg.textContent = 'Enviando email via SMTP...';
 
+    const baseFont = elComposeEditor.style.fontFamily || 'Arial, Helvetica, sans-serif';
+    const baseSize = elComposeEditor.style.fontSize || '15px';
+    const wrappedHtml = `<div style="font-family: ${baseFont}; font-size: ${baseSize};">${elComposeEditor.innerHTML}</div>`;
+
     const formData = new FormData();
     formData.append('to', elComposeTo.value);
     formData.append('cc', elComposeCc.value);
     formData.append('subject', elComposeSubject.value);
-    formData.append('html', elComposeEditor.innerHTML);
+    formData.append('html', wrappedHtml);
     formData.append('text', elComposeEditor.innerText);
 
     attachedFiles.forEach(f => formData.append('attachments', f));
@@ -1571,6 +1721,33 @@
       if (selectedMessage) toggleFlagEmail(selectedMessage.uid, !selectedMessage.flagged);
     };
 
+    const btnMaximizeReader = document.getElementById('btnMaximizeReader');
+    const elReadingPane = document.getElementById('readingPane');
+    const setReaderMaximized = (max) => {
+      if (!elReadingPane) return;
+      if (max) elReadingPane.classList.add('maximized');
+      else elReadingPane.classList.remove('maximized');
+
+      if (btnMaximizeReader) {
+        btnMaximizeReader.title = max ? 'Restaurar visualização (Esc)' : 'Maximizar mensagem na tela';
+        btnMaximizeReader.innerHTML = max
+          ? '<i class="fa-solid fa-compress"></i> <span>Restaurar</span>'
+          : '<i class="fa-solid fa-expand"></i> <span>Maximizar</span>';
+      }
+    };
+
+    if (btnMaximizeReader && elReadingPane) {
+      btnMaximizeReader.onclick = () => {
+        setReaderMaximized(!elReadingPane.classList.contains('maximized'));
+      };
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && elReadingPane && elReadingPane.classList.contains('maximized')) {
+        setReaderMaximized(false);
+      }
+    });
+
     elBtnReply.onclick = () => {
       if (!selectedMessage) return;
       openCompose({
@@ -1644,6 +1821,61 @@
     const btnInsertSignatureNow = document.getElementById('btnInsertSignatureNow');
     if (btnInsertSignatureNow) {
       btnInsertSignatureNow.onclick = () => insertSignatureIntoCompose();
+    }
+
+    // Compose Font Family, Size (px) and Text Color
+    const composeFontFamily = document.getElementById('composeFontFamily');
+    const composeFontSize = document.getElementById('composeFontSize');
+    const composeTextColor = document.getElementById('composeTextColor');
+
+    if (composeFontFamily && elComposeEditor) {
+      composeFontFamily.onchange = () => {
+        const fontVal = composeFontFamily.value;
+        elComposeEditor.focus();
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed) {
+          document.execCommand('fontName', false, fontVal);
+        } else {
+          elComposeEditor.style.fontFamily = fontVal;
+          document.execCommand('fontName', false, fontVal);
+        }
+      };
+    }
+
+    if (composeFontSize && elComposeEditor) {
+      composeFontSize.onchange = () => {
+        const px = composeFontSize.value || '15';
+        elComposeEditor.focus();
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+          document.execCommand('fontSize', false, '7');
+          elComposeEditor.querySelectorAll('font[size="7"]').forEach(fontEl => {
+            fontEl.removeAttribute('size');
+            fontEl.style.fontSize = `${px}px`;
+          });
+        } else {
+          elComposeEditor.style.fontSize = `${px}px`;
+          if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            const span = document.createElement('span');
+            span.style.fontSize = `${px}px`;
+            span.innerHTML = '&#8203;';
+            range.insertNode(span);
+            const newRange = document.createRange();
+            newRange.setStart(span.firstChild, 1);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+          }
+        }
+      };
+    }
+
+    if (composeTextColor && elComposeEditor) {
+      composeTextColor.oninput = (e) => {
+        elComposeEditor.focus();
+        document.execCommand('foreColor', false, e.target.value);
+      };
     }
 
     const switchSettingsTab = (tabId) => {

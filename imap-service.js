@@ -572,6 +572,48 @@ class ImapService {
     }
   }
 
+  async getAttachment(folder = 'INBOX', uid, partId) {
+    const numUid = parseInt(uid, 10);
+    const idx = parseInt(partId, 10);
+    if (isNaN(numUid) || isNaN(idx)) return null;
+
+    const client = await this.getClient();
+    if (!client) return null;
+
+    try {
+      const lock = await client.getMailboxLock(folder);
+      let parsed = null;
+      try {
+        const msgResult = await client.fetchOne(String(numUid), { source: true }, { uid: true });
+        if (msgResult && msgResult.source) {
+          parsed = await simpleParser(msgResult.source);
+        } else {
+          const dlResult = await client.download(String(numUid), undefined, { uid: true });
+          if (dlResult && dlResult.content) {
+            parsed = await simpleParser(dlResult.content);
+          }
+        }
+      } finally {
+        lock.release();
+      }
+
+      if (!parsed || !Array.isArray(parsed.attachments) || !parsed.attachments[idx]) {
+        return null;
+      }
+
+      const att = parsed.attachments[idx];
+      return {
+        filename: att.filename || `anexo_${idx + 1}`,
+        contentType: att.contentType || 'application/octet-stream',
+        size: att.size || (att.content ? att.content.length : 0),
+        content: att.content
+      };
+    } catch (err) {
+      console.error(`[IMAP] Erro ao baixar anexo UID ${numUid} part ${idx}:`, err.message);
+      return null;
+    }
+  }
+
   async setFlags(folder, uid, { seen, flagged }) {
     const client = await this.getClient();
     if (!client) return { success: true };
