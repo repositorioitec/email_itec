@@ -639,6 +639,17 @@ class ImapService {
     return this.deleteMessages(folder, [uid]);
   }
 
+  async findTrashFolder(client) {
+    try {
+      const list = await client.list();
+      const bySpecialUse = list.find(m => m.specialUse === '\\Trash');
+      if (bySpecialUse) return bySpecialUse.path;
+      const byName = list.find(m => /^(trash|deleted|lixeira|itens exclu)/i.test(m.name || m.path));
+      if (byName) return byName.path;
+    } catch (e) {}
+    return 'Trash';
+  }
+
   async deleteMessages(folder, uids) {
     const cleanUids = (Array.isArray(uids) ? uids : [uids]).filter(Boolean).map(String);
     if (cleanUids.length === 0) return { success: true };
@@ -647,13 +658,29 @@ class ImapService {
     if (!client) return { success: true };
 
     try {
+      const trashFolder = await this.findTrashFolder(client);
+      const isAlreadyInTrash =
+        folder.toLowerCase() === trashFolder.toLowerCase() ||
+        /^(trash|deleted|lixeira|itens exclu)/i.test(folder);
+
       const lock = await client.getMailboxLock(folder);
       try {
-        await client.messageDelete(cleanUids.join(','), { uid: true });
+        if (isAlreadyInTrash) {
+          // Permanently delete only if already inside Trash / Itens Excluídos
+          await client.messageDelete(cleanUids.join(','), { uid: true });
+        } else {
+          // Move to Trash / Itens Excluídos without permanent deletion
+          await client.messageMove(cleanUids.join(','), trashFolder, { uid: true });
+        }
       } finally {
         lock.release();
       }
-      return { success: true, count: cleanUids.length };
+      return {
+        success: true,
+        movedToTrash: !isAlreadyInTrash,
+        trashFolder,
+        count: cleanUids.length
+      };
     } catch (err) {
       console.error('[IMAP deleteMessages Error]', err);
       return { success: false, error: err.message };

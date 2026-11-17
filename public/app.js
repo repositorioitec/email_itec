@@ -187,6 +187,7 @@
       loadContacts();
       loadCalendarEvents();
       loadTodos();
+      startAutoSync();
     } else {
       showLoginScreen();
     }
@@ -325,6 +326,7 @@
         loadContacts();
         loadCalendarEvents();
         loadTodos();
+        startAutoSync();
       } else {
         if (elLoginErrorBox) {
           elLoginErrorBox.style.display = 'block';
@@ -454,6 +456,15 @@
     });
   }
 
+  function adjustFolderUnreadCount(folderPath, delta) {
+    if (!folderPath || !delta) return;
+    const f = folders.find(item => item.path.toLowerCase() === folderPath.toLowerCase());
+    if (f) {
+      f.unread = Math.max(0, (f.unread || 0) + delta);
+      renderFolders();
+    }
+  }
+
   function selectFolder(path, name) {
     currentFolder = path;
     elCurrentFolderTitle.textContent = name || path;
@@ -499,6 +510,72 @@
       console.error('Erro ao buscar emails:', err);
       elMessageListScroll.innerHTML = '<div style="padding: 24px; text-align: center; color: #d13438;">Erro ao conectar com servidor IMAP.</div>';
     }
+  }
+
+  let autoSyncTimer = null;
+  let isBackgroundSyncing = false;
+
+  async function backgroundSyncEmails() {
+    if (isBackgroundSyncing) return;
+    if (sessionStorage.getItem('outlook_session_auth') !== 'true') return;
+    if (elLoginOverlay && elLoginOverlay.style.display === 'flex') return;
+
+    isBackgroundSyncing = true;
+    try {
+      const folderBefore = currentFolder;
+      const prevUids = new Set(messages.map(m => String(m.uid)));
+      const prevUnreadCount = messages.filter(m => !m.seen).length;
+
+      // Sync folders and current folder messages in parallel
+      const query = new URLSearchParams({
+        folder: folderBefore,
+        filter: currentFilter,
+        search: currentSearch
+      });
+
+      const [foldersRes, msgsRes] = await Promise.all([
+        fetch('/api/imap/folders').then(r => r.json()).catch(() => null),
+        fetch(`/api/imap/messages?${query.toString()}`).then(r => r.json()).catch(() => null)
+      ]);
+
+      if (foldersRes && foldersRes.success && Array.isArray(foldersRes.folders)) {
+        folders = foldersRes.folders;
+        renderFolders();
+      }
+
+      // Only update message list if user is still on the same folder
+      if (msgsRes && msgsRes.success && currentFolder === folderBefore) {
+        const freshMessages = msgsRes.messages || [];
+        const newArrivals = freshMessages.filter(m => !prevUids.has(String(m.uid)));
+        const hasChanges =
+          newArrivals.length > 0 ||
+          freshMessages.length !== messages.length ||
+          freshMessages.filter(m => !m.seen).length !== prevUnreadCount;
+
+        if (hasChanges) {
+          messages = freshMessages;
+          if (elMessageCountLabel) {
+            elMessageCountLabel.textContent = `${messages.length} ${messages.length === 1 ? 'mensagem' : 'mensagens'}`;
+          }
+          renderMessageList();
+
+          if (newArrivals.length > 0 && currentSearch === '') {
+            showToast(`${newArrivals.length} ${newArrivals.length === 1 ? 'novo e-mail recebido' : 'novos e-mails recebidos'}!`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[AutoSync 30s] Aviso na sincronização:', err.message);
+    } finally {
+      isBackgroundSyncing = false;
+    }
+  }
+
+  function startAutoSync() {
+    if (autoSyncTimer) clearInterval(autoSyncTimer);
+    autoSyncTimer = setInterval(() => {
+      backgroundSyncEmails();
+    }, 30000); // Every 30 seconds
   }
 
   function syncSelectionUI() {
@@ -753,17 +830,25 @@
         `;
       }
 
-      // Mark seen locally
+      // Mark seen locally and update unread badge immediately
+      const wasUnread = !msg.seen;
+      const targetFolder = msg.folder || currentFolder || 'INBOX';
       msg.seen = true;
+      if (wasUnread) {
+        adjustFolderUnreadCount(targetFolder, -1);
+        renderMessageList();
+      }
 
       // 4. Fetch full email content and attachments from the server
-      const targetFolder = msg.folder || currentFolder || 'INBOX';
       const res = await fetch(`/api/imap/message/${msg.uid}?folder=${encodeURIComponent(targetFolder)}`);
       const data = await res.json();
       
       if (data.success && data.message) {
         selectedMessage = data.message;
         renderReadingDetail(data.message);
+        if (wasUnread) {
+          loadFolders();
+        }
       } else {
         if (elReadBdy) {
           elReadBdy.innerHTML = `
@@ -1026,9 +1111,15 @@
         body: JSON.stringify({ folder: currentFolder, uid, seen })
       });
       const target = messages.find(m => String(m.uid) === String(uid));
-      if (target) target.seen = seen;
+      if (target) {
+        const wasUnread = !target.seen;
+        target.seen = seen;
+        if (wasUnread && seen) adjustFolderUnreadCount(currentFolder, -1);
+        else if (!wasUnread && !seen) adjustFolderUnreadCount(currentFolder, 1);
+      }
       renderMessageList();
       updateRibbonState();
+      loadFolders();
       showToast(seen ? 'Marcado como lido' : 'Marcado como não lido');
     } catch (e) {
       console.error(e);
@@ -1051,20 +1142,36 @@
     }
   }
 
+  function isTrashFolderActive() {
+    return /^(trash|deleted|lixeira|itens exclu)/i.test(currentFolder || '');
+  }
+
   async function deleteEmail(uid) {
-    if (!confirm('Deseja realmente excluir este email?')) return;
+    const inTrash = isTrashFolderActive();
+    const confirmMsg = inTrash
+      ? 'Este e-mail já está em Itens Excluídos. Deseja apagá-lo definitivamente?'
+      : 'Deseja mover este e-mail para Itens Excluídos?';
+    if (!confirm(confirmMsg)) return;
+
     try {
-      await fetch(`/api/imap/message/${uid}?folder=${encodeURIComponent(currentFolder)}`, { method: 'DELETE' });
-      messages = messages.filter(m => String(m.uid) !== String(uid));
-      selectedUids.delete(String(uid));
-      if (selectedMessage && String(selectedMessage.uid) === String(uid)) {
-        selectedMessage = null;
-        elReadingContentView.style.display = 'none';
-        elNoSelectionView.style.display = 'flex';
+      const res = await fetch(`/api/imap/message/${uid}?folder=${encodeURIComponent(currentFolder)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        messages = messages.filter(m => String(m.uid) !== String(uid));
+        selectedUids.delete(String(uid));
+        if (selectedMessage && String(selectedMessage.uid) === String(uid)) {
+          selectedMessage = null;
+          if (elReadingContentView) elReadingContentView.setAttribute('style', 'display: none !important;');
+          if (elNoSelectionView) elNoSelectionView.setAttribute('style', 'display: flex !important;');
+        }
+        elMessageCountLabel.textContent = `${messages.length} ${messages.length === 1 ? 'mensagem' : 'mensagens'}`;
+        renderMessageList();
+        updateRibbonState();
+        loadFolders();
+        showToast(data.movedToTrash ? 'E-mail movido para Itens Excluídos!' : 'E-mail excluído definitivamente!');
+      } else {
+        alert(data.error || 'Falha ao excluir e-mail');
       }
-      renderMessageList();
-      updateRibbonState();
-      showToast('Email excluído com sucesso');
     } catch (e) {
       console.error(e);
     }
@@ -1073,10 +1180,15 @@
   async function bulkDeleteEmails(uids) {
     const list = Array.from(uids).map(String);
     if (list.length === 0) return;
-    if (!confirm(`Deseja realmente excluir ${list.length} ${list.length === 1 ? 'e-mail selecionado' : 'e-mails selecionados'}?`)) return;
+
+    const inTrash = isTrashFolderActive();
+    const confirmMsg = inTrash
+      ? `Estes ${list.length} e-mail(s) já estão em Itens Excluídos. Deseja apagá-los definitivamente?`
+      : `Deseja mover ${list.length} ${list.length === 1 ? 'e-mail selecionado' : 'e-mails selecionados'} para Itens Excluídos?`;
+    if (!confirm(confirmMsg)) return;
 
     try {
-      showToast(`Excluindo ${list.length} e-mail(s)...`);
+      showToast(inTrash ? `Excluindo ${list.length} e-mail(s)...` : `Movendo ${list.length} e-mail(s) para Itens Excluídos...`);
       const res = await fetch('/api/imap/bulk-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1095,7 +1207,12 @@
         elMessageCountLabel.textContent = `${messages.length} ${messages.length === 1 ? 'mensagem' : 'mensagens'}`;
         renderMessageList();
         updateRibbonState();
-        showToast(`${list.length} ${list.length === 1 ? 'e-mail excluído' : 'e-mails excluídos'} com sucesso!`);
+        loadFolders();
+        showToast(
+          data.movedToTrash
+            ? `${list.length} ${list.length === 1 ? 'e-mail movido' : 'e-mails movidos'} para Itens Excluídos!`
+            : `${list.length} ${list.length === 1 ? 'e-mail excluído' : 'e-mails excluídos'} definitivamente!`
+        );
       } else {
         alert(data.error || 'Falha ao excluir e-mails selecionados');
       }
@@ -1117,14 +1234,21 @@
       const data = await res.json();
       if (data.success) {
         const uidSet = new Set(list);
+        let unreadDelta = 0;
         messages.forEach(m => {
           if (uidSet.has(String(m.uid))) {
-            if (seen !== undefined) m.seen = seen;
+            if (seen !== undefined) {
+              if (!m.seen && seen) unreadDelta -= 1;
+              else if (m.seen && !seen) unreadDelta += 1;
+              m.seen = seen;
+            }
             if (flagged !== undefined) m.flagged = flagged;
           }
         });
+        if (unreadDelta !== 0) adjustFolderUnreadCount(currentFolder, unreadDelta);
         renderMessageList();
         updateRibbonState();
+        if (seen !== undefined) loadFolders();
         if (seen !== undefined) {
           showToast(seen ? `${list.length} marcado(s) como lido(s)` : `${list.length} marcado(s) como não lido(s)`);
         } else if (flagged !== undefined) {
@@ -2942,6 +3066,7 @@
       populateSignatureBuilderUI();
       elTestResultBox.style.display = 'none';
       elSettingsModal.style.display = 'flex';
+      switchSettingsTab('tabLayout');
     };
     if (elBtnOpenSettings) elBtnOpenSettings.onclick = openSettings;
     if (elRailSettingsBtn) elRailSettingsBtn.onclick = openSettings;
