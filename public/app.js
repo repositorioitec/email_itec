@@ -346,6 +346,7 @@
       clearInterval(autoSyncTimer);
       autoSyncTimer = null;
     }
+    stopDraftAutoSaveTimer();
     stopInactivityMonitor();
     toggleMobileFoldersDrawer(false);
     closeMobileReadingPane();
@@ -355,7 +356,7 @@
     if (elComposeModal) elComposeModal.style.display = 'none';
     const profileMenu = document.getElementById('userProfileMenu');
     if (profileMenu) profileMenu.style.display = 'none';
-    const attModal = document.getElementById('attPreviewModal');
+    const attModal = document.getElementById('attachmentPreviewModal') || document.getElementById('attPreviewModal');
     if (attModal) attModal.style.display = 'none';
     const contactModal = document.getElementById('contactModal');
     if (contactModal) contactModal.style.display = 'none';
@@ -1041,6 +1042,290 @@
     }
   }
 
+  const externalScriptPromises = {};
+  function loadExternalScriptOnce(src) {
+    if (externalScriptPromises[src]) return externalScriptPromises[src];
+    externalScriptPromises[src] = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => {
+        delete externalScriptPromises[src];
+        reject(new Error('Falha ao carregar biblioteca de visualização.'));
+      };
+      document.head.appendChild(s);
+    });
+    return externalScriptPromises[src];
+  }
+
+  let activePreviewSessionId = 0;
+
+  async function renderPdfInCanvas(bodyEl, arrayBuffer, sessionId) {
+    if (!window.pdfjsLib) {
+      await loadExternalScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+    }
+    const pdfjsLib = window.pdfjsLib;
+    if (!pdfjsLib) {
+      throw new Error('Biblioteca PDF indisponível.');
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(arrayBuffer.slice(0)),
+      cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+      cMapPacked: true
+    });
+    const pdfDoc = await loadingTask.promise;
+    if (sessionId !== activePreviewSessionId) return;
+
+    bodyEl.classList.add('is-document-mode');
+    bodyEl.innerHTML = `
+      <div class="att-viewer-shell">
+        <div class="att-viewer-toolbar">
+          <span><i class="fa-regular fa-file-pdf" style="color: #d13438; margin-right: 4px;"></i><strong id="pdfPageInfo">${pdfDoc.numPages} ${pdfDoc.numPages === 1 ? 'página' : 'páginas'}</strong></span>
+          <div class="att-viewer-zoom-controls">
+            <button type="button" class="att-viewer-zoom-btn" id="btnPdfZoomOut" title="Diminuir zoom"><i class="fa-solid fa-minus"></i></button>
+            <button type="button" class="att-viewer-zoom-btn" id="btnPdfZoomReset" title="Ajustar à largura da tela">100%</button>
+            <button type="button" class="att-viewer-zoom-btn" id="btnPdfZoomIn" title="Aumentar zoom"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+        <div class="att-viewer-pages" id="pdfPagesContainer"></div>
+      </div>
+    `;
+
+    const pagesContainer = document.getElementById('pdfPagesContainer');
+    const btnZoomOut = document.getElementById('btnPdfZoomOut');
+    const btnZoomReset = document.getElementById('btnPdfZoomReset');
+    const btnZoomIn = document.getElementById('btnPdfZoomIn');
+
+    let zoomFactor = 1.0;
+    let renderRunId = 0;
+
+    const renderAllPages = async () => {
+      const currentRun = ++renderRunId;
+      if (!pagesContainer || sessionId !== activePreviewSessionId) return;
+
+      pagesContainer.innerHTML = '';
+      if (btnZoomReset) btnZoomReset.textContent = `${Math.round(zoomFactor * 100)}%`;
+
+      const firstPage = await pdfDoc.getPage(1);
+      const unscaledVp = firstPage.getViewport({ scale: 1 });
+      const availWidth = Math.max(240, (pagesContainer.clientWidth || window.innerWidth) - 24);
+      const fitScale = Math.min(availWidth / unscaledVp.width, 1.45);
+      const effectiveScale = fitScale * zoomFactor;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+
+      pagesContainer.style.alignItems = (unscaledVp.width * effectiveScale > availWidth) ? 'flex-start' : 'center';
+
+      for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+        if (currentRun !== renderRunId || sessionId !== activePreviewSessionId) return;
+
+        const page = pageNum === 1 ? firstPage : await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: effectiveScale });
+
+        const wrap = document.createElement('div');
+        wrap.className = 'att-pdf-page-wrap';
+
+        const canvas = document.createElement('canvas');
+        canvas.className = 'att-pdf-canvas';
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+        const badge = document.createElement('span');
+        badge.className = 'att-pdf-page-badge';
+        badge.textContent = `${pageNum} / ${pdfDoc.numPages}`;
+
+        wrap.appendChild(canvas);
+        if (pdfDoc.numPages > 1) wrap.appendChild(badge);
+        pagesContainer.appendChild(wrap);
+
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const transform = dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null;
+        await page.render({ canvasContext: ctx, viewport, transform }).promise;
+      }
+    };
+
+    if (btnZoomOut) {
+      btnZoomOut.onclick = () => {
+        zoomFactor = Math.max(0.5, Math.round((zoomFactor - 0.25) * 100) / 100);
+        renderAllPages();
+      };
+    }
+    if (btnZoomIn) {
+      btnZoomIn.onclick = () => {
+        zoomFactor = Math.min(3.0, Math.round((zoomFactor + 0.25) * 100) / 100);
+        renderAllPages();
+      };
+    }
+    if (btnZoomReset) {
+      btnZoomReset.onclick = () => {
+        zoomFactor = 1.0;
+        renderAllPages();
+      };
+    }
+
+    await renderAllPages();
+  }
+
+  function renderImageInViewer(bodyEl, blobUrl, filename) {
+    bodyEl.classList.add('is-document-mode');
+    bodyEl.innerHTML = `
+      <div class="att-viewer-shell">
+        <div class="att-viewer-toolbar">
+          <span><i class="fa-regular fa-file-image" style="color: var(--ms-blue); margin-right: 4px;"></i>Visualização de Imagem</span>
+          <div class="att-viewer-zoom-controls">
+            <button type="button" class="att-viewer-zoom-btn" id="btnImgZoomOut" title="Diminuir zoom"><i class="fa-solid fa-minus"></i></button>
+            <button type="button" class="att-viewer-zoom-btn" id="btnImgZoomReset" title="Ajustar à tela">100%</button>
+            <button type="button" class="att-viewer-zoom-btn" id="btnImgZoomIn" title="Aumentar zoom"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+        <div class="att-viewer-pages" id="imgPreviewWrap" style="justify-content: center;">
+          <img id="attZoomableImg" src="${blobUrl}" alt="${escapeHtml(filename)}" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); transition: width 0.15s;">
+        </div>
+      </div>
+    `;
+
+    const imgEl = document.getElementById('attZoomableImg');
+    const wrapEl = document.getElementById('imgPreviewWrap');
+    const btnOut = document.getElementById('btnImgZoomOut');
+    const btnReset = document.getElementById('btnImgZoomReset');
+    const btnIn = document.getElementById('btnImgZoomIn');
+    let imgZoom = 1.0;
+
+    const applyImgZoom = () => {
+      if (!imgEl || !wrapEl) return;
+      if (btnReset) btnReset.textContent = `${Math.round(imgZoom * 100)}%`;
+      if (imgZoom === 1.0) {
+        imgEl.style.maxWidth = '100%';
+        imgEl.style.maxHeight = '100%';
+        imgEl.style.width = 'auto';
+        wrapEl.style.alignItems = 'center';
+        wrapEl.style.justifyContent = 'center';
+      } else {
+        imgEl.style.maxWidth = 'none';
+        imgEl.style.maxHeight = 'none';
+        imgEl.style.width = `${Math.round(imgZoom * 100)}%`;
+        wrapEl.style.alignItems = imgZoom > 1 ? 'flex-start' : 'center';
+        wrapEl.style.justifyContent = 'flex-start';
+      }
+    };
+
+    if (btnOut) btnOut.onclick = () => { imgZoom = Math.max(0.5, Math.round((imgZoom - 0.25) * 100) / 100); applyImgZoom(); };
+    if (btnIn) btnIn.onclick = () => { imgZoom = Math.min(3.5, Math.round((imgZoom + 0.25) * 100) / 100); applyImgZoom(); };
+    if (btnReset) btnReset.onclick = () => { imgZoom = 1.0; applyImgZoom(); };
+  }
+
+  function parseCsvRows(text) {
+    const firstLine = (text.split(/\r?\n/)[0] || '');
+    const semiCount = (firstLine.match(/;/g) || []).length;
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const sep = tabCount > semiCount && tabCount > commaCount ? '\t' : (semiCount > commaCount ? ';' : ',');
+
+    return text.split(/\r?\n/).filter(l => l.trim().length > 0).slice(0, 500).map(line => {
+      const cells = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if (ch === sep && !inQuotes) {
+          cells.push(cur);
+          cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      cells.push(cur);
+      return cells;
+    });
+  }
+
+  function renderCsvInViewer(bodyEl, text) {
+    const rows = parseCsvRows(text);
+    const tableHtml = rows.map((row, rIdx) => {
+      const tag = rIdx === 0 ? 'th' : 'td';
+      return `<tr>${row.map(c => `<${tag}>${escapeHtml(c)}</${tag}>`).join('')}</tr>`;
+    }).join('');
+    bodyEl.classList.add('is-document-mode');
+    bodyEl.innerHTML = `
+      <div class="att-viewer-shell">
+        <div class="att-sheet-table-wrap">
+          <table class="att-sheet-table">${tableHtml}</table>
+        </div>
+      </div>
+    `;
+  }
+
+  async function renderExcelInViewer(bodyEl, arrayBuffer, sessionId) {
+    if (!window.XLSX) {
+      await loadExternalScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    }
+    if (sessionId !== activePreviewSessionId) return;
+    const wb = window.XLSX.read(arrayBuffer, { type: 'array' });
+    const sheetNames = wb.SheetNames || [];
+    if (sheetNames.length === 0) throw new Error('Planilha vazia.');
+
+    bodyEl.classList.add('is-document-mode');
+    bodyEl.innerHTML = `
+      <div class="att-viewer-shell">
+        <div class="att-sheet-tabs" id="attSheetTabs"></div>
+        <div class="att-sheet-table-wrap" id="attSheetContent"></div>
+      </div>
+    `;
+    const tabsEl = document.getElementById('attSheetTabs');
+    const contentEl = document.getElementById('attSheetContent');
+
+    const showSheet = (name) => {
+      if (!contentEl) return;
+      const ws = wb.Sheets[name];
+      const html = window.XLSX.utils.sheet_to_html(ws, { editable: false });
+      contentEl.innerHTML = html;
+      const tbl = contentEl.querySelector('table');
+      if (tbl) tbl.className = 'att-sheet-table';
+      if (tabsEl) {
+        tabsEl.querySelectorAll('.att-sheet-tab').forEach(b => {
+          b.classList.toggle('active', b.getAttribute('data-sheet') === name);
+        });
+      }
+    };
+
+    sheetNames.forEach((name, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `att-sheet-tab ${idx === 0 ? 'active' : ''}`;
+      btn.setAttribute('data-sheet', name);
+      btn.textContent = name;
+      btn.onclick = () => showSheet(name);
+      if (tabsEl) tabsEl.appendChild(btn);
+    });
+    if (sheetNames.length <= 1 && tabsEl) tabsEl.style.display = 'none';
+    showSheet(sheetNames[0]);
+  }
+
+  async function renderDocxInViewer(bodyEl, arrayBuffer, sessionId) {
+    if (!window.mammoth) {
+      await loadExternalScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js');
+    }
+    if (sessionId !== activePreviewSessionId) return;
+    const result = await window.mammoth.convertToHtml({ arrayBuffer });
+    if (sessionId !== activePreviewSessionId) return;
+
+    bodyEl.classList.add('is-document-mode');
+    bodyEl.innerHTML = `
+      <div class="att-viewer-shell">
+        <div class="att-viewer-pages">
+          <div class="att-docx-paper">${result.value || '<p style="color: #605e5c;">(Documento sem conteúdo de texto)</p>'}</div>
+        </div>
+      </div>
+    `;
+  }
+
   async function previewAttachment(msg, att) {
     const modal = document.getElementById('attachmentPreviewModal');
     const titleEl = document.getElementById('attPreviewTitle');
@@ -1054,20 +1339,25 @@
       return;
     }
 
+    const sessionId = ++activePreviewSessionId;
+
     if (activeAttBlobUrl) {
       URL.revokeObjectURL(activeAttBlobUrl);
       activeAttBlobUrl = null;
     }
 
+    bodyEl.classList.remove('is-document-mode');
     if (titleEl) titleEl.textContent = att.filename || 'Anexo';
     if (sizeEl) sizeEl.textContent = `(${formatBytes(att.size)})`;
-    bodyEl.innerHTML = '<div style="text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 28px; color: var(--ms-blue); margin-bottom: 10px;"></i><p>Carregando visualização do anexo...</p></div>';
+    bodyEl.innerHTML = '<div style="padding: 24px; text-align: center; color: var(--text-secondary);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 28px; color: var(--ms-blue); margin-bottom: 10px;"></i><p>Carregando visualização do anexo...</p></div>';
     modal.style.display = 'flex';
 
     if (btnDl) btnDl.onclick = () => downloadAttachment(msg, att);
 
     const closeModal = () => {
+      activePreviewSessionId++;
       modal.style.display = 'none';
+      bodyEl.classList.remove('is-document-mode');
       bodyEl.innerHTML = '';
       if (activeAttBlobUrl) {
         URL.revokeObjectURL(activeAttBlobUrl);
@@ -1081,44 +1371,93 @@
 
     try {
       const blob = await fetchAttachmentBlob(msg, att, false);
+      if (sessionId !== activePreviewSessionId) return;
+
       const ct = (att.contentType || blob.type || '').toLowerCase();
       const fn = (att.filename || '').toLowerCase();
 
-      // Fix generic octet-stream MIME for PDF/images by extension
+      // Fix generic octet-stream MIME for common formats by extension
       let effectiveBlob = blob;
       if (ct === 'application/octet-stream' || !ct) {
         if (fn.endsWith('.pdf')) effectiveBlob = new Blob([blob], { type: 'application/pdf' });
-        else if (/\.(png)$/.test(fn)) effectiveBlob = new Blob([blob], { type: 'image/png' });
+        else if (fn.endsWith('.png')) effectiveBlob = new Blob([blob], { type: 'image/png' });
         else if (/\.(jpg|jpeg)$/.test(fn)) effectiveBlob = new Blob([blob], { type: 'image/jpeg' });
         else if (fn.endsWith('.gif')) effectiveBlob = new Blob([blob], { type: 'image/gif' });
         else if (fn.endsWith('.webp')) effectiveBlob = new Blob([blob], { type: 'image/webp' });
-        else if (/\.(txt|csv|log)$/.test(fn)) effectiveBlob = new Blob([blob], { type: 'text/plain; charset=utf-8' });
+        else if (fn.endsWith('.svg')) effectiveBlob = new Blob([blob], { type: 'image/svg+xml' });
+        else if (fn.endsWith('.mp4')) effectiveBlob = new Blob([blob], { type: 'video/mp4' });
+        else if (fn.endsWith('.mp3')) effectiveBlob = new Blob([blob], { type: 'audio/mpeg' });
+        else if (/\.(txt|csv|tsv|log|json|xml|md)$/.test(fn)) effectiveBlob = new Blob([blob], { type: 'text/plain; charset=utf-8' });
       }
 
-      activeAttBlobUrl = URL.createObjectURL(effectiveBlob);
-      const isImage = effectiveBlob.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(fn);
       const isPdf = effectiveBlob.type.includes('pdf') || fn.endsWith('.pdf');
-      const isText = effectiveBlob.type.startsWith('text/') || /\.(txt|csv|json|xml|log)$/.test(fn);
+      const isImage = effectiveBlob.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg|avif|ico)$/.test(fn);
+      const isCsv = fn.endsWith('.csv') || fn.endsWith('.tsv') || ct.includes('csv');
+      const isExcel = /\.(xlsx|xls|ods)$/.test(fn) || ct.includes('spreadsheet') || ct.includes('excel');
+      const isDocx = fn.endsWith('.docx') || ct.includes('wordprocessingml');
+      const isVideo = effectiveBlob.type.startsWith('video/') || /\.(mp4|webm|mov|ogv)$/.test(fn);
+      const isAudio = effectiveBlob.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/.test(fn);
+      const isHtml = /\.(html|htm)$/.test(fn) || ct === 'text/html';
+      const isText = effectiveBlob.type.startsWith('text/') || /\.(txt|json|xml|log|md|ini|yml|yaml|sql|js|css|py)$/.test(fn);
 
-      if (isImage) {
-        bodyEl.innerHTML = `<img src="${activeAttBlobUrl}" alt="${escapeHtml(att.filename)}" style="max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);">`;
-      } else if (isPdf) {
-        bodyEl.innerHTML = `<iframe src="${activeAttBlobUrl}" style="width: 100%; height: 100%; border: none; border-radius: 4px; background: #fff;"></iframe>`;
+      if (isPdf) {
+        const arrayBuf = await effectiveBlob.arrayBuffer();
+        if (sessionId !== activePreviewSessionId) return;
+        await renderPdfInCanvas(bodyEl, arrayBuf, sessionId);
+      } else if (isImage) {
+        activeAttBlobUrl = URL.createObjectURL(effectiveBlob);
+        renderImageInViewer(bodyEl, activeAttBlobUrl, att.filename || 'Imagem');
+      } else if (isCsv) {
+        const csvText = await effectiveBlob.text();
+        if (sessionId !== activePreviewSessionId) return;
+        renderCsvInViewer(bodyEl, csvText);
+      } else if (isExcel) {
+        const arrayBuf = await effectiveBlob.arrayBuffer();
+        if (sessionId !== activePreviewSessionId) return;
+        await renderExcelInViewer(bodyEl, arrayBuf, sessionId);
+      } else if (isDocx) {
+        const arrayBuf = await effectiveBlob.arrayBuffer();
+        if (sessionId !== activePreviewSessionId) return;
+        await renderDocxInViewer(bodyEl, arrayBuf, sessionId);
+      } else if (isVideo) {
+        activeAttBlobUrl = URL.createObjectURL(effectiveBlob);
+        bodyEl.innerHTML = `<video src="${activeAttBlobUrl}" controls playsinline style="max-width: 100%; max-height: 100%; border-radius: 6px; background: #000;"></video>`;
+      } else if (isAudio) {
+        activeAttBlobUrl = URL.createObjectURL(effectiveBlob);
+        bodyEl.innerHTML = `
+          <div style="background: #fff; color: #201f1e; padding: 28px 24px; border-radius: 8px; text-align: center; width: min(420px, 90vw); box-shadow: 0 2px 12px rgba(0,0,0,0.12);">
+            <i class="fa-solid fa-music" style="font-size: 36px; color: var(--ms-blue); margin-bottom: 12px;"></i>
+            <div style="font-weight: 600; font-size: 14px; margin-bottom: 14px; word-break: break-word;">${escapeHtml(att.filename)}</div>
+            <audio src="${activeAttBlobUrl}" controls style="width: 100%;"></audio>
+          </div>
+        `;
+      } else if (isHtml) {
+        const htmlContent = await effectiveBlob.text();
+        if (sessionId !== activePreviewSessionId) return;
+        bodyEl.classList.add('is-document-mode');
+        bodyEl.innerHTML = `<iframe sandbox="" style="width: 100%; height: 100%; border: none; background: #fff;"></iframe>`;
+        const ifr = bodyEl.querySelector('iframe');
+        if (ifr) ifr.srcdoc = htmlContent;
       } else if (isText) {
-        const textContent = await effectiveBlob.text();
-        bodyEl.innerHTML = `<pre style="width: 100%; height: 100%; margin: 0; padding: 16px; background: #fff; border-radius: 4px; overflow: auto; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap;">${escapeHtml(textContent)}</pre>`;
+        let textContent = await effectiveBlob.text();
+        if (sessionId !== activePreviewSessionId) return;
+        if (fn.endsWith('.json')) {
+          try { textContent = JSON.stringify(JSON.parse(textContent), null, 2); } catch (e) {}
+        }
+        bodyEl.classList.add('is-document-mode');
+        bodyEl.innerHTML = `<pre style="width: 100%; height: 100%; margin: 0; padding: 16px; background: #fff; color: #201f1e; overflow: auto; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(textContent)}</pre>`;
       } else {
         bodyEl.innerHTML = `
-          <div style="background: #fff; padding: 32px 40px; border-radius: 8px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 420px;">
+          <div style="background: #fff; color: #201f1e; padding: 28px 24px; border-radius: 8px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: min(420px, 90vw);">
             <i class="${getAttachmentIcon(att.filename, att.contentType)}" style="font-size: 48px; margin-bottom: 14px; display: block;"></i>
             <h4 style="font-size: 15px; margin-bottom: 6px; word-break: break-word;">${escapeHtml(att.filename)}</h4>
-            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 18px;">
+            <p style="font-size: 12px; color: #605e5c; margin-bottom: 18px;">
               Tamanho: ${formatBytes(att.size)}<br>
-              Pré-visualização direta indisponível para este formato no navegador.
+              Este formato requer aplicativo externo para abertura.
             </p>
             <button type="button" class="action-btn primary" id="btnAttFallbackDownload" style="margin: 0 auto;">
               <i class="fa-solid fa-download"></i>
-              <span>Baixar no Computador</span>
+              <span>Baixar Arquivo</span>
             </button>
           </div>
         `;
@@ -1126,12 +1465,41 @@
         if (btnFallback) btnFallback.onclick = () => downloadAttachment(msg, att);
       }
     } catch (err) {
-      bodyEl.innerHTML = `<div style="color: #a80000; padding: 20px;"><i class="fa-solid fa-circle-exclamation"></i> Erro ao visualizar anexo: ${escapeHtml(err.message)}</div>`;
+      if (sessionId !== activePreviewSessionId) return;
+      bodyEl.classList.remove('is-document-mode');
+      bodyEl.innerHTML = `<div style="background: #fff; color: #a80000; padding: 20px; border-radius: 6px; margin: 16px; text-align: center;"><i class="fa-solid fa-circle-exclamation"></i> Erro ao visualizar anexo: ${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  function isDraftsFolderActive() {
+    const f = (currentFolder || '').toLowerCase();
+    return f.includes('draft') || f.includes('rascunh');
   }
 
   function renderReadingDetail(msg) {
     if (!msg) return;
+
+    const btnEditDraft = document.getElementById('btnEditDraft');
+    if (btnEditDraft) {
+      if (isDraftsFolderActive()) {
+        btnEditDraft.style.display = 'inline-flex';
+        btnEditDraft.onclick = () => {
+          const toList = Array.isArray(msg.to) ? msg.to.map(t => t.address).filter(Boolean).join(', ') : '';
+          const ccList = Array.isArray(msg.cc) ? msg.cc.map(t => t.address).filter(Boolean).join(', ') : '';
+          const subj = (msg.subject && msg.subject !== '(Rascunho sem assunto)' && msg.subject !== '(Sem assunto)') ? msg.subject : '';
+          openCompose({
+            to: toList,
+            cc: ccList,
+            subject: subj,
+            body: msg.html || (msg.text ? `<p>${escapeHtml(msg.text).replace(/\n/g, '<br>')}</p>` : ''),
+            draftUid: msg.uid,
+            skipAutoSignature: true
+          });
+        };
+      } else {
+        btnEditDraft.style.display = 'none';
+      }
+    }
 
     // Attachments
     if (msg.attachments && msg.attachments.length > 0) {
@@ -2287,7 +2655,108 @@
     }
   }
 
-  // Compose Functions
+  // Compose & 2-Minute Draft Auto-Save Functions
+  const DRAFT_AUTOSAVE_MS = 2 * 60 * 1000; // 2 minutes
+  let draftAutoSaveTimer = null;
+  let currentDraftUid = null;
+  let initialComposeBodyHtml = '';
+  let lastSavedDraftSnapshot = '';
+  let isSavingDraft = false;
+
+  function stopDraftAutoSaveTimer() {
+    if (draftAutoSaveTimer) {
+      clearInterval(draftAutoSaveTimer);
+      draftAutoSaveTimer = null;
+    }
+  }
+
+  function getComposeSnapshot() {
+    return JSON.stringify({
+      to: (elComposeTo?.value || '').trim(),
+      cc: (elComposeCc?.value || '').trim(),
+      subject: (elComposeSubject?.value || '').trim(),
+      html: (elComposeEditor?.innerHTML || '').trim(),
+      files: attachedFiles.map(f => `${f.name}:${f.size}`).join('|')
+    });
+  }
+
+  function hasUnsentComposeContent() {
+    if ((elComposeTo?.value || '').trim()) return true;
+    if ((elComposeCc?.value || '').trim()) return true;
+    if ((elComposeSubject?.value || '').trim()) return true;
+    if (attachedFiles.length > 0) return true;
+    const currentHtml = (elComposeEditor?.innerHTML || '').trim();
+    const currentText = (elComposeEditor?.innerText || '').trim();
+    return currentHtml !== initialComposeBodyHtml && currentText.length > 0;
+  }
+
+  async function saveComposeDraftNow() {
+    if (!elComposeModal || elComposeModal.style.display !== 'flex') return;
+    if (elBtnSendMail?.disabled || isSavingDraft) return;
+    if (!hasUnsentComposeContent()) return;
+
+    const snapshot = getComposeSnapshot();
+    if (snapshot === lastSavedDraftSnapshot) return;
+
+    isSavingDraft = true;
+    if (elComposeStatusMsg) {
+      elComposeStatusMsg.textContent = 'Salvando rascunho...';
+    }
+
+    const baseFont = elComposeEditor.style.fontFamily || 'Arial, Helvetica, sans-serif';
+    const baseSize = elComposeEditor.style.fontSize || '15px';
+    const rawHtml = elComposeEditor.innerHTML || '';
+    const wrappedHtml = rawHtml.includes('font-family:')
+      ? rawHtml
+      : `<div style="font-family: ${baseFont}; font-size: ${baseSize};">${rawHtml}</div>`;
+
+    const formData = new FormData();
+    formData.append('to', elComposeTo.value || '');
+    formData.append('cc', elComposeCc.value || '');
+    formData.append('subject', elComposeSubject.value || '');
+    formData.append('html', wrappedHtml);
+    formData.append('text', elComposeEditor.innerText || '');
+    if (currentDraftUid) {
+      formData.append('previousDraftUid', String(currentDraftUid));
+    }
+    attachedFiles.forEach(f => formData.append('attachments', f));
+
+    try {
+      const res = await fetch('/api/imap/draft', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        if (data.uid) currentDraftUid = data.uid;
+        lastSavedDraftSnapshot = snapshot;
+        const hhmm = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        if (elComposeStatusMsg) {
+          elComposeStatusMsg.textContent = `Salvo em Rascunhos às ${hhmm}`;
+        }
+        showToast('Mensagem salva automaticamente na pasta Rascunhos.');
+        loadFolders();
+        if (isDraftsFolderActive()) {
+          loadMessages();
+        }
+      } else if (elComposeStatusMsg) {
+        elComposeStatusMsg.textContent = '';
+      }
+    } catch (err) {
+      console.warn('[AutoSave Draft]:', err.message);
+      if (elComposeStatusMsg) elComposeStatusMsg.textContent = '';
+    } finally {
+      isSavingDraft = false;
+    }
+  }
+
+  function startDraftAutoSaveTimer() {
+    stopDraftAutoSaveTimer();
+    draftAutoSaveTimer = setInterval(() => {
+      saveComposeDraftNow();
+    }, DRAFT_AUTOSAVE_MS);
+  }
+
   function openCompose(options = {}) {
     elComposeModal.style.display = 'flex';
     elComposeTo.value = options.to || '';
@@ -2295,7 +2764,8 @@
     elComposeSubject.value = options.subject || '';
 
     const isReplyOrForward = !!options.isReplyOrForward;
-    const shouldAutoSign = isReplyOrForward ? (sigState.autoReplyForward !== false) : (sigState.autoNewMail !== false);
+    const skipAutoSignature = !!options.skipAutoSignature;
+    const shouldAutoSign = !skipAutoSignature && (isReplyOrForward ? (sigState.autoReplyForward !== false) : (sigState.autoNewMail !== false));
     const sigHtml = (sigState.html || '').trim();
 
     let finalBody = options.body || '';
@@ -2319,7 +2789,13 @@
     elComposeEditor.innerHTML = finalBody;
     attachedFiles = [];
     elComposeAttachedFilesCount.textContent = '';
-    elComposeStatusMsg.textContent = '';
+    elComposeStatusMsg.textContent = options.draftUid ? 'Editando rascunho salvo' : '';
+
+    currentDraftUid = options.draftUid || null;
+    initialComposeBodyHtml = elComposeEditor.innerHTML.trim();
+    lastSavedDraftSnapshot = options.draftUid ? getComposeSnapshot() : '';
+    startDraftAutoSaveTimer();
+
     if (options.to) {
       elComposeEditor.focus();
     } else {
@@ -2328,6 +2804,10 @@
   }
 
   function closeCompose() {
+    stopDraftAutoSaveTimer();
+    currentDraftUid = null;
+    initialComposeBodyHtml = '';
+    lastSavedDraftSnapshot = '';
     elComposeModal.style.display = 'none';
     elComposeModal.classList.remove('maximized', 'minimized');
     const btnMax = document.getElementById('btnMaximizeCompose');
@@ -2337,11 +2817,13 @@
     }
     elComposeForm.reset();
     elComposeEditor.innerHTML = '';
+    if (elComposeStatusMsg) elComposeStatusMsg.textContent = '';
     attachedFiles = [];
   }
 
   async function handleSendEmail(e) {
     e.preventDefault();
+    stopDraftAutoSaveTimer();
     elBtnSendMail.disabled = true;
     elComposeStatusMsg.textContent = 'Enviando email via SMTP...';
 
@@ -2355,9 +2837,13 @@
     formData.append('subject', elComposeSubject.value);
     formData.append('html', wrappedHtml);
     formData.append('text', elComposeEditor.innerText);
+    if (currentDraftUid) {
+      formData.append('draftUid', String(currentDraftUid));
+    }
 
     attachedFiles.forEach(f => formData.append('attachments', f));
 
+    let sentOk = false;
     try {
       const res = await fetch('/api/smtp/send', {
         method: 'POST',
@@ -2365,10 +2851,11 @@
       });
       const data = await res.json();
       if (data.success) {
+        sentOk = true;
         showToast(data.message || 'Email enviado com sucesso!');
         closeCompose();
         loadFolders();
-        if (currentFolder.toLowerCase().includes('sent') || currentFolder.toLowerCase().includes('enviad')) {
+        if (currentFolder.toLowerCase().includes('sent') || currentFolder.toLowerCase().includes('enviad') || isDraftsFolderActive()) {
           loadMessages();
         }
       } else {
@@ -2378,7 +2865,10 @@
       alert('Erro de comunicação com o servidor: ' + err.message);
     } finally {
       elBtnSendMail.disabled = false;
-      elComposeStatusMsg.textContent = '';
+      if (!sentOk && elComposeModal.style.display === 'flex') {
+        elComposeStatusMsg.textContent = '';
+        startDraftAutoSaveTimer();
+      }
     }
   }
 
@@ -2995,7 +3485,18 @@
     }
 
     elBtnDiscardMail.onclick = () => {
-      if (confirm('Deseja descartar este rascunho?')) closeCompose();
+      if (confirm('Deseja descartar este rascunho?')) {
+        const draftToRemove = currentDraftUid;
+        closeCompose();
+        if (draftToRemove) {
+          fetch(`/api/imap/draft/${encodeURIComponent(draftToRemove)}`, { method: 'DELETE' })
+            .then(() => {
+              loadFolders();
+              if (isDraftsFolderActive()) loadMessages();
+            })
+            .catch(() => {});
+        }
+      }
     };
 
     elComposeFileInput.onchange = (e) => {

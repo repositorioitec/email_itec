@@ -3416,6 +3416,247 @@ body.dark-mode .login-autocomplete-item.active {
     bottom: 64px;
     max-width: none;
   }
+
+  /* Fullscreen Attachment Preview on Mobile */
+  #attachmentPreviewModal {
+    padding: 0 !important;
+  }
+
+  #attachmentPreviewModal .att-preview-dialog {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  #attachmentPreviewModal .modal-header {
+    padding: 10px 12px;
+  }
+
+  #attPreviewSize {
+    display: none;
+  }
 }
+
+/* =========================================================
+   Inline Attachment Viewer (PDF Canvas, Images, Office, CSV)
+   ========================================================= */
+.att-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #e9e8e7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.att-preview-body.is-document-mode {
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.att-viewer-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.att-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #faf9f8;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.att-viewer-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.att-viewer-zoom-btn {
+  border: 1px solid var(--border-color);
+  background: #ffffff;
+  color: var(--text-primary);
+  border-radius: 4px;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.att-viewer-zoom-btn:hover {
+  background: var(--list-hover);
+}
+
+.att-viewer-pages {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 10px 24px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.att-pdf-page-wrap {
+  position: relative;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.att-pdf-canvas {
+  display: block;
+}
+
+.att-pdf-page-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  background: rgba(32, 31, 30, 0.65);
+  color: #ffffff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.att-docx-paper {
+  width: 100%;
+  max-width: 800px;
+  background: #ffffff;
+  color: #201f1e;
+  padding: 24px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  line-height: 1.55;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.att-docx-paper img,
+.att-docx-paper table {
+  max-width: 100%;
+  height: auto;
+}
+
+.att-docx-paper table {
+  border-collapse: collapse;
+  margin: 10px 0;
+}
+
+.att-docx-paper td,
+.att-docx-paper th {
+  border: 1px solid #d2d0ce;
+  padding: 6px 8px;
+}
+
+.att-sheet-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #faf9f8;
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.att-sheet-tab {
+  border: 1px solid var(--border-color);
+  background: #ffffff;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.att-sheet-tab.active {
+  background: var(--ms-blue);
+  color: #ffffff;
+  border-color: var(--ms-blue);
+}
+
+.att-sheet-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #ffffff;
+  -webkit-overflow-scrolling: touch;
+}
+
+.att-sheet-table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 12.5px;
+  color: #201f1e;
+}
+
+.att-sheet-table th,
+.att-sheet-table td {
+  border: 1px solid #e1dfdd;
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.att-sheet-table tr:first-child td,
+.att-sheet-table th {
+  background: #f3f2f1;
+  font-weight: 700;
+}
+
+body.dark-mode .att-preview-body {
+  background: #16181b;
+}
+
+body.dark-mode .att-viewer-toolbar,
+body.dark-mode .att-sheet-tabs {
+  background: #1e2024;
+  border-color: var(--border-color);
+}
+
+body.dark-mode .att-viewer-zoom-btn,
+body.dark-mode .att-sheet-tab {
+  background: #2a2d32;
+  color: var(--text-primary);
+  border-color: #3f434a;
+}
+
+body.dark-mode .att-sheet-tab.active {
+  background: var(--ms-blue);
+  color: #ffffff;
+  border-color: var(--ms-blue);
+}
+
 
 

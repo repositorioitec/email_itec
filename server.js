@@ -451,10 +451,40 @@ app.post('/api/imap/bulk-flags', async (req, res) => {
   }
 });
 
+// Save or update message draft in IMAP Drafts (Rascunhos)
+app.post('/api/imap/draft', upload.array('attachments'), async (req, res) => {
+  try {
+    const { to = '', cc = '', subject = '', text = '', html = '', previousDraftUid = '' } = req.body;
+    const attachments = req.files || [];
+    const result = await imapService.saveDraftMessage({
+      to,
+      cc,
+      subject,
+      text,
+      html,
+      attachments,
+      previousDraftUid: previousDraftUid || null
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Remove a temporary draft by UID
+app.delete('/api/imap/draft/:uid', async (req, res) => {
+  try {
+    const result = await imapService.removeDraftByUid(req.params.uid);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Send message via SMTP
 app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
   try {
-    const { to, cc, bcc, subject, text, html } = req.body;
+    const { to, cc, bcc, subject, text, html, draftUid } = req.body;
     const attachments = req.files || [];
 
     const result = await smtpService.sendMail({
@@ -469,6 +499,9 @@ app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
 
     if (result.success && imapService.hasCredentials()) {
       imapService.appendSentMessage({ to, cc, subject, text, html }).catch(() => {});
+    }
+    if (result.success && draftUid) {
+      imapService.removeDraftByUid(draftUid).catch(() => {});
     }
 
     res.json(result);

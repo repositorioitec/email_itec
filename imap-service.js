@@ -746,6 +746,114 @@ class ImapService {
       return { success: false, error: err.message };
     }
   }
+  async findDraftsFolder(client) {
+    try {
+      const list = await client.list();
+      const bySpecialUse = list.find(m => m.specialUse === '\\Drafts');
+      if (bySpecialUse) return bySpecialUse.path;
+      const byName = list.find(m => /^(drafts|rascunhos)/i.test(m.name || m.path));
+      if (byName) return byName.path;
+    } catch (e) {}
+    return 'Drafts';
+  }
+
+  async saveDraftMessage({ to = '', cc = '', subject = '', text = '', html = '', attachments = [], previousDraftUid = null }) {
+    const client = await this.getClient();
+    const user = this.config.imap?.user || 'clodoaldo.silva@itecensino.com.br';
+
+    if (!client) {
+      if (this.hasCredentials()) {
+        return { success: false, error: 'Servidor IMAP indisponível no momento.' };
+      }
+      if (previousDraftUid) {
+        this.mockMessages = this.mockMessages.filter(m => !(m.folder === 'Drafts' && String(m.uid) === String(previousDraftUid)));
+      }
+      const mockUid = Date.now();
+      this.mockMessages.unshift({
+        uid: mockUid,
+        seq: this.mockMessages.length + 1,
+        folder: 'Drafts',
+        subject: subject || '(Rascunho sem assunto)',
+        from: { name: user.split('@')[0], address: user },
+        to: to ? to.split(',').map(addr => ({ name: addr.trim(), address: addr.trim() })) : [],
+        cc: cc ? cc.split(',').map(addr => ({ name: addr.trim(), address: addr.trim() })) : [],
+        date: new Date().toISOString(),
+        seen: true,
+        flagged: false,
+        hasAttachments: (attachments || []).length > 0,
+        attachments: [],
+        snippet: (text || '').slice(0, 140),
+        html: html || '',
+        text: text || ''
+      });
+      return { success: true, uid: mockUid, folder: 'Drafts' };
+    }
+
+    try {
+      const MailComposer = require('nodemailer/lib/mail-composer');
+      const draftsFolder = await this.findDraftsFolder(client);
+
+      if (previousDraftUid) {
+        try {
+          const lock = await client.getMailboxLock(draftsFolder);
+          try {
+            await client.messageDelete(String(previousDraftUid), { uid: true });
+          } finally {
+            lock.release();
+          }
+        } catch (delErr) {
+          console.warn('[IMAP saveDraftMessage replace old draft]:', delErr.message);
+        }
+      }
+
+      const mail = new MailComposer({
+        from: user,
+        to: to || undefined,
+        cc: cc || undefined,
+        subject: subject || '(Rascunho sem assunto)',
+        text: text || '',
+        html: html || '',
+        date: new Date(),
+        attachments: (attachments || []).map(f => ({
+          filename: f.originalname,
+          content: f.buffer,
+          contentType: f.mimetype
+        }))
+      });
+
+      const rawBuffer = await mail.compile().build();
+      const appendRes = await client.append(draftsFolder, rawBuffer, ['\\Draft', '\\Seen']);
+      const newUid = appendRes && appendRes.uid ? appendRes.uid : null;
+      console.log(`[IMAP] Rascunho salvo na pasta "${draftsFolder}" (UID: ${newUid || 'auto'}).`);
+      return { success: true, uid: newUid, folder: draftsFolder };
+    } catch (err) {
+      console.error('[IMAP saveDraftMessage Error]:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async removeDraftByUid(uid) {
+    if (!uid) return { success: true };
+    const client = await this.getClient();
+    if (!client) {
+      this.mockMessages = this.mockMessages.filter(m => !(m.folder === 'Drafts' && String(m.uid) === String(uid)));
+      return { success: true };
+    }
+    try {
+      const draftsFolder = await this.findDraftsFolder(client);
+      const lock = await client.getMailboxLock(draftsFolder);
+      try {
+        await client.messageDelete(String(uid), { uid: true });
+      } finally {
+        lock.release();
+      }
+      return { success: true };
+    } catch (err) {
+      console.warn('[IMAP removeDraftByUid]:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
   async appendSentMessage({ to, cc, subject, text, html }) {
     const client = await this.getClient();
     if (!client) return;
