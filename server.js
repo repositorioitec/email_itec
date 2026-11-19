@@ -5,6 +5,13 @@ const os = require('os');
 const path = require('path');
 const multer = require('multer');
 
+process.on('uncaughtException', (err) => {
+  console.warn('[Server uncaughtException]:', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Server unhandledRejection]:', reason?.message || reason);
+});
+
 const ImapService = require('./imap-service');
 const SmtpService = require('./smtp-service');
 
@@ -113,6 +120,16 @@ let appConfig = {
 
 const imapService = new ImapService(appConfig);
 const smtpService = new SmtpService(appConfig);
+
+// ── Server Boot ID ─────────────────────────────────────────────────────────────
+// Generated once per process start. The browser compares this value to detect
+// that the Node.js server was restarted (e.g. after a PC reboot) and forces
+// re-login only in that case.
+const SERVER_BOOT_ID = `boot_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+app.get('/api/server-boot-id', (_req, res) => {
+  res.json({ bootId: SERVER_BOOT_ID });
+});
+// ──────────────────────────────────────────────────────────────────────────────
 
 // Stateless Session Middleware for Vercel Serverless (restores user credentials across Lambda instances)
 app.use((req, res, next) => {
@@ -653,6 +670,80 @@ app.delete('/api/contacts', (req, res) => {
 
     saveConfigSafe(appConfig);
     res.json({ success: true, contacts: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================
+// Contact Groups Endpoints (Grupos de Envio)
+// ========================
+app.get('/api/contact-groups', (req, res) => {
+  const userKey = getActiveUserKey();
+  const groups = (appConfig.contactGroupsByUser && appConfig.contactGroupsByUser[userKey]) || [];
+  res.json({ success: true, groups });
+});
+
+app.post('/api/contact-groups', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const id = (req.body.id || `grp_${Date.now()}`).trim();
+    const name = (req.body.name || '').trim();
+    const description = (req.body.description || '').trim();
+    let members = Array.isArray(req.body.members) ? req.body.members : [];
+
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'O nome do grupo é obrigatório.' });
+    }
+
+    // Clean, validate and deduplicate member emails
+    const cleanMembers = Array.from(new Set(
+      members.map(m => String(m || '').trim().toLowerCase())
+             .filter(m => m.includes('@'))
+    ));
+
+    appConfig.contactGroupsByUser = appConfig.contactGroupsByUser || {};
+    let list = appConfig.contactGroupsByUser[userKey] || [];
+
+    const existingIdx = list.findIndex(g => g.id === id);
+    const nowIso = new Date().toISOString();
+
+    const groupObj = {
+      id,
+      name,
+      description,
+      members: cleanMembers,
+      updatedAt: nowIso
+    };
+
+    if (existingIdx >= 0) {
+      groupObj.createdAt = list[existingIdx].createdAt || nowIso;
+      list[existingIdx] = groupObj;
+    } else {
+      groupObj.createdAt = nowIso;
+      list.push(groupObj);
+    }
+
+    list.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    appConfig.contactGroupsByUser[userKey] = list;
+    saveConfigSafe(appConfig);
+
+    res.json({ success: true, groups: list, group: groupObj });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/contact-groups/:id', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const id = req.params.id;
+    appConfig.contactGroupsByUser = appConfig.contactGroupsByUser || {};
+    let list = appConfig.contactGroupsByUser[userKey] || [];
+    list = list.filter(g => g.id !== id);
+    appConfig.contactGroupsByUser[userKey] = list;
+    saveConfigSafe(appConfig);
+    res.json({ success: true, groups: list });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

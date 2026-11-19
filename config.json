@@ -107,15 +107,15 @@
         "source": "servidor"
       },
       {
-        "email": "daniele.henriques@itecensino.com.br",
-        "name": "daniele.henriques",
+        "email": "danielehenriques.itec@gmail.com",
+        "name": "Daniele DanieleHenriques",
         "phone": "",
         "company": "",
         "source": "servidor"
       },
       {
-        "email": "danielehenriques.itec@gmail.com",
-        "name": "danielehenriques.itec",
+        "email": "daniele.henriques@itecensino.com.br",
+        "name": "daniele.henriques",
         "phone": "",
         "company": "",
         "source": "servidor"
@@ -129,7 +129,7 @@
       },
       {
         "email": "debora.azevedo@itecensino.com.br",
-        "name": "debora.azevedo",
+        "name": "Debora Azevedo",
         "phone": "",
         "company": "",
         "source": "servidor"
@@ -192,7 +192,7 @@
       },
       {
         "email": "pedro.faria@itecensino.com.br",
-        "name": "pedro.faria",
+        "name": "Pedro Faria",
         "phone": "",
         "company": "",
         "source": "servidor"
@@ -280,5 +280,8 @@
   "layout": {
     "readingPane": "bottom"
   },
-  "demoModeIfDisconnected": true
+  "demoModeIfDisconnected": true,
+  "contactGroupsByUser": {
+    "clodoaldo.silva@itecensino.com.br": []
+  }
 }

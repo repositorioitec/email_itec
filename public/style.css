@@ -1537,6 +1537,153 @@ border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
 }
 
+/* ── Insert Table Popover ── */
+.table-insert-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.table-picker-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 3200;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+  padding: 10px 12px;
+  min-width: 230px;
+  user-select: none;
+}
+
+.table-picker-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ms-blue);
+  text-align: center;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.table-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 20px);
+  grid-template-rows: repeat(6, 20px);
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+.table-picker-cell {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #c8c8c8;
+  border-radius: 2px;
+  background: #f8f8f8;
+  cursor: pointer;
+  transition: background 0.08s, border-color 0.08s;
+}
+
+.table-picker-cell.hovered {
+  background: #cce4f7;
+  border-color: var(--ms-blue);
+}
+
+.table-picker-manual {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-color);
+  padding-top: 8px;
+  flex-wrap: wrap;
+}
+
+.table-picker-manual input[type="number"] {
+  width: 42px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-size: 11px;
+  text-align: center;
+  padding: 2px 4px;
+  background: var(--card-bg, #fff);
+  color: var(--text-primary);
+}
+
+.table-picker-manual input[type="number"]:focus {
+  border-color: var(--ms-blue);
+  outline: none;
+}
+
+/* Compose table styles (injected into email body, excluding signature tables) */
+.compose-editor table:not([border="0"]) {
+  border-collapse: collapse;
+  width: auto;
+  max-width: 100%;
+  margin: 8px 0;
+}
+
+.compose-editor table:not([border="0"]) td,
+.compose-editor table:not([border="0"]) th {
+  border: 1px solid #adb5bd;
+  padding: 6px 10px;
+  min-width: 60px;
+  font-size: 13px;
+  vertical-align: top;
+}
+
+.compose-editor table:not([border="0"]) th {
+  background: #e9f0fb;
+  font-weight: 700;
+}
+
+/* Never apply automatic borders/padding to email signature tables */
+.compose-editor [data-outlook-signature="true"] table,
+.compose-editor [data-outlook-signature="true"] td,
+.compose-editor [data-outlook-signature="true"] th {
+  border-width: 0;
+  padding: 0;
+  min-width: 0;
+  background: transparent;
+}
+
+/* Dark mode table popover */
+body.dark-mode .table-picker-popover {
+  background: #25282c;
+  border-color: var(--border-color);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}
+
+body.dark-mode .table-picker-label {
+  color: #6cb4f5;
+}
+
+body.dark-mode .table-picker-cell {
+  background: #2d3036;
+  border-color: #3f434a;
+}
+
+body.dark-mode .table-picker-cell.hovered {
+  background: #1b4f7d;
+  border-color: #6cb4f5;
+}
+
+body.dark-mode .table-picker-manual {
+  border-color: var(--border-color);
+}
+
+body.dark-mode .compose-editor table:not([border="0"]) td,
+body.dark-mode .compose-editor table:not([border="0"]) th {
+  border-color: #4a4f57;
+}
+
+body.dark-mode .compose-editor table:not([border="0"]) th {
+  background: #2a3450;
+}
+
 .compose-footer {
   padding: 10px 16px;
   background: #f8f8f8;
@@ -2198,6 +2345,153 @@ border-bottom: 1px solid var(--border-color);
   background: #edebe9;
   color: #605e5c;
   font-weight: 600;
+}
+
+/* Contact Filter Tabs & Distribution Groups (Grupos de Envio) */
+.contacts-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.contacts-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: #f8f9fa;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.contacts-tab-btn:hover {
+  background: #e9ecef;
+  color: var(--text-primary);
+}
+
+.contacts-tab-btn.active {
+  background: var(--ms-blue);
+  color: #ffffff;
+  border-color: var(--ms-blue);
+}
+
+.contacts-tab-btn .tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.contacts-tab-btn.active .tab-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.ct-avatar.group-avatar {
+  background: #5c2d91;
+  color: #ffffff;
+}
+
+.ct-badge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #f0e6f7;
+  color: #5c2d91;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.ct-badge-group-pill {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #f0e6f7;
+  color: #5c2d91;
+  font-weight: 600;
+}
+
+.ct-group-members-count {
+  font-weight: 600;
+  color: #5c2d91;
+  margin-right: 6px;
+}
+
+.ct-group-members-preview {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.group-contacts-picker {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--card-bg, #ffffff);
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.group-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  transition: background 0.12s;
+}
+
+.group-contact-item:hover {
+  background: #f3f2f1;
+}
+
+.group-contact-item input[type="checkbox"] {
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--ms-blue);
+}
+
+.group-contact-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-contact-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.group-contact-email {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 /* Outlook Calendar View */
@@ -2906,6 +3200,51 @@ body.dark-mode .todo-view {
   background: var(--reader-bg);
 }
 
+body.dark-mode .contacts-filter-tabs {
+  background: #1e2024;
+  border-color: var(--border-color);
+}
+
+body.dark-mode .contacts-tab-btn {
+  background: #2a2d32;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+body.dark-mode .contacts-tab-btn:hover {
+  background: #33373d;
+  color: var(--text-primary);
+}
+
+body.dark-mode .contacts-tab-btn.active {
+  background: var(--ms-blue);
+  color: #ffffff;
+  border-color: var(--ms-blue);
+}
+
+body.dark-mode .ct-badge-group {
+  background: rgba(92,45,145,0.25);
+  color: #c3a1e0;
+}
+
+body.dark-mode .ct-badge-group-pill {
+  background: rgba(92,45,145,0.25);
+  color: #c3a1e0;
+}
+
+body.dark-mode .ct-group-members-count {
+  color: #c3a1e0;
+}
+
+body.dark-mode .group-contacts-picker {
+  background: #25282c;
+  border-color: var(--border-color);
+}
+
+body.dark-mode .group-contact-item:hover {
+  background: #2d3036;
+}
+
 body.dark-mode .contacts-header,
 body.dark-mode .contacts-table-header,
 body.dark-mode .calendar-header,
@@ -3366,6 +3705,30 @@ body.dark-mode .login-autocomplete-item.active {
   .ct-col-phone:empty,
   .ct-col-company:empty {
     display: none;
+  }
+
+  /* Grupos de Envio - Portrait */
+  .contacts-filter-tabs {
+    padding: 6px 14px;
+    gap: 6px;
+  }
+
+  .contacts-tab-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .contacts-tab-btn span:not(.tab-badge) {
+    display: none;
+  }
+
+  .contacts-tab-btn .fa-solid,
+  .contacts-tab-btn .fa-regular {
+    font-size: 13px;
+  }
+
+  .group-contacts-picker {
+    max-height: 140px;
   }
 
   /* Calendar View in Portrait */

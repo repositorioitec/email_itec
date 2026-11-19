@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=3.8.0">
+  <link rel="stylesheet" href="style.css?v=4.2.0">
 </head>
 
 <body>
@@ -317,13 +317,18 @@
           <div style="position: relative; display: flex; align-items: center;">
             <i class="fa-solid fa-magnifying-glass"
               style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px;"></i>
-            <input type="search" id="contactsSearchInput" class="form-control" placeholder="Buscar contato..."
+            <input type="search" id="contactsSearchInput" class="form-control" placeholder="Buscar contato ou grupo..."
               style="padding-left: 30px; width: 230px; height: 32px;">
           </div>
           <button type="button" class="action-btn" id="btnSyncContacts"
             title="Sincronizar contatos das pastas do servidor IMAP">
             <i class="fa-solid fa-rotate" style="color: var(--ms-blue);"></i>
             <span>Sincronizar com Servidor</span>
+          </button>
+          <button type="button" class="action-btn" id="btnNewContactGroup"
+            title="Criar novo grupo de envio (lista de distribuição)">
+            <i class="fa-solid fa-users" style="color: #5c2d91;"></i>
+            <span>Novo Grupo</span>
           </button>
           <button type="button" class="action-btn primary" id="btnNewContact">
             <i class="fa-solid fa-user-plus"></i>
@@ -332,11 +337,30 @@
         </div>
       </div>
 
+      <!-- Tabs de filtro de contatos e grupos -->
+      <div class="contacts-filter-tabs">
+        <button type="button" class="contacts-tab-btn active" data-tab="all" id="tabFilterAll">
+          <i class="fa-solid fa-list"></i>
+          <span>Todos</span>
+          <span class="tab-badge" id="contactsTabAllCount">0</span>
+        </button>
+        <button type="button" class="contacts-tab-btn" data-tab="contacts" id="tabFilterContacts">
+          <i class="fa-solid fa-user"></i>
+          <span>Contatos</span>
+          <span class="tab-badge" id="contactsTabIndivCount">0</span>
+        </button>
+        <button type="button" class="contacts-tab-btn" data-tab="groups" id="tabFilterGroups">
+          <i class="fa-solid fa-users"></i>
+          <span>Grupos de Envio</span>
+          <span class="tab-badge" id="contactsTabGroupsCount">0</span>
+        </button>
+      </div>
+
       <div class="contacts-table-header">
         <div class="ct-col ct-col-name">Nome</div>
-        <div class="ct-col ct-col-email">E-mail</div>
-        <div class="ct-col ct-col-phone">Telefone</div>
-        <div class="ct-col ct-col-company">Empresa / Origem</div>
+        <div class="ct-col ct-col-email">E-mail / Membros</div>
+        <div class="ct-col ct-col-phone">Telefone / Detalhes</div>
+        <div class="ct-col ct-col-company">Empresa / Tipo</div>
         <div class="ct-col ct-col-actions">Ações</div>
       </div>
 
@@ -543,6 +567,27 @@
           title="Lista com marcadores"><i class="fa-solid fa-list-ul"></i></button>
         <button type="button" class="format-btn" onclick="document.execCommand('insertOrderedList', false, null)"
           title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
+        <div class="ribbon-divider" style="height: 18px;"></div>
+
+        <!-- Insert Table Button + Popover -->
+        <div class="table-insert-wrap" id="tableInsertWrap">
+          <button type="button" class="format-btn" id="btnInsertTable" title="Inserir tabela">
+            <i class="fa-solid fa-table"></i> Tabela
+          </button>
+          <!-- Grid picker popover -->
+          <div class="table-picker-popover" id="tablePickerPopover" style="display:none;">
+            <div class="table-picker-label" id="tablePickerLabel">1 × 1</div>
+            <div class="table-picker-grid" id="tablePickerGrid"></div>
+            <div class="table-picker-manual">
+              <span>Personalizado:</span>
+              <input type="number" id="tableManualRows" min="1" max="20" value="3" placeholder="Linhas">
+              <span>×</span>
+              <input type="number" id="tableManualCols" min="1" max="10" value="3" placeholder="Colunas">
+              <button type="button" id="btnInsertTableManual" class="action-btn primary" style="padding: 3px 10px; font-size: 11px;">Inserir</button>
+            </div>
+          </div>
+        </div>
+
         <div class="ribbon-divider" style="height: 18px;"></div>
         <label class="format-btn" style="cursor: pointer;" title="Anexar arquivos">
           <i class="fa-solid fa-paperclip"></i> Anexar
@@ -1031,6 +1076,66 @@
     </div>
   </div>
 
+  <!-- Add / Edit Contact Group Modal (Grupos de Envio) -->
+  <div class="modal-overlay" id="contactGroupModal" style="display: none; z-index: 2650;">
+    <div class="modal-dialog" style="width: 540px; max-width: 95vw;">
+      <div class="modal-header">
+        <h3 id="contactGroupModalTitle"><i class="fa-solid fa-users"
+            style="color: #5c2d91; margin-right: 8px;"></i>Novo Grupo de Envio</h3>
+        <button type="button" class="window-btn" id="btnCloseContactGroupModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="contactGroupForm">
+        <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
+          <input type="hidden" id="contactGroupId" value="">
+          <div class="form-group">
+            <label for="contactGroupNameInput"><strong>Nome do Grupo:</strong></label>
+            <input type="text" class="form-control" id="contactGroupNameInput" placeholder="Ex: Professores, Equipe Comercial, Turma A" required>
+          </div>
+          <div class="form-group">
+            <label for="contactGroupDescInput">Descrição / Finalidade (opcional):</label>
+            <input type="text" class="form-control" id="contactGroupDescInput" placeholder="Ex: Professores dos cursos técnicos de informática">
+          </div>
+
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="margin: 0;"><strong>Membros do Grupo (<span id="groupMembersCountBadge">0</span> selecionados):</strong></label>
+              <button type="button" class="text-btn" id="btnClearGroupMembers" style="font-size: 11px; color: var(--ms-blue); border: none; background: transparent; cursor: pointer; text-decoration: underline;">Limpar membros</button>
+            </div>
+            <div class="recipient-input-container" id="containerGroupMembers" style="min-height: 44px; padding: 4px 8px; margin-bottom: 6px;">
+              <input type="text" id="groupMemberInput" class="recipient-bare-input" placeholder="Digite um e-mail e tecle Enter..." autocomplete="off">
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">
+              Digite e-mails e tecle Enter, ou marque abaixo na lista de contatos para incluir no grupo.
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="margin: 0; font-size: 12px; font-weight: 600;">Marcar contatos salvos:</label>
+              <input type="search" id="groupPickerFilter" class="form-control" placeholder="Buscar contato na lista..." style="width: 180px; height: 26px; font-size: 11px; padding: 2px 8px;">
+            </div>
+            <div id="groupContactsPicker" class="group-contacts-picker">
+              <!-- Checklist of contacts generated dynamically -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" class="action-btn" id="btnDeleteContactGroup" style="display: none; color: #a80000; border-color: rgba(168,0,0,0.3);">
+            <i class="fa-regular fa-trash-can"></i>
+            <span>Excluir Grupo</span>
+          </button>
+          <div style="display: flex; gap: 8px; margin-left: auto;">
+            <button type="button" class="action-btn" id="btnCancelContactGroupModal">Cancelar</button>
+            <button type="submit" class="action-btn primary" id="btnSaveContactGroup">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>Salvar Grupo</span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Add / Edit Calendar Event Modal -->
   <div class="modal-overlay" id="calendarEventModal" style="display: none; z-index: 2660;">
     <div class="modal-dialog" style="width: 480px;">
@@ -1118,7 +1223,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="app.js?v=3.9.0"></script>
+  <script src="app.js?v=4.2.0"></script>
 </body>
 
 </html>

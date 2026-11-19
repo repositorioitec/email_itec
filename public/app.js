@@ -2,13 +2,67 @@
 (function () {
   'use strict';
 
+  // Persistent daily/boot session store (localStorage survives browser close/reopen;
+  // expires only on computer/server restart, new calendar day, or manual logout)
+  function getTodayDateKey() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const SESSION_STORE = {
+    getAuth:      () => localStorage.getItem('outlook_session_auth'),
+    setAuth:      (v) => localStorage.setItem('outlook_session_auth', v),
+    clearAuth:    () => localStorage.removeItem('outlook_session_auth'),
+    getUser:      () => localStorage.getItem('outlook_session_user'),
+    setUser:      (v) => localStorage.setItem('outlook_session_user', v),
+    clearUser:    () => localStorage.removeItem('outlook_session_user'),
+    getPass:      () => localStorage.getItem('outlook_session_pass_b64'),
+    setPass:      (v) => localStorage.setItem('outlook_session_pass_b64', v),
+    clearPass:    () => localStorage.removeItem('outlook_session_pass_b64'),
+    getBootId:    () => localStorage.getItem('outlook_server_boot_id'),
+    setBootId:    (v) => localStorage.setItem('outlook_server_boot_id', v),
+    getLoginDate: () => localStorage.getItem('outlook_session_login_date'),
+    setLoginDate: (v) => localStorage.setItem('outlook_session_login_date', v),
+    clearAll() {
+      this.clearAuth();
+      this.clearUser();
+      this.clearPass();
+      localStorage.removeItem('outlook_server_boot_id');
+      localStorage.removeItem('outlook_session_login_date');
+      // Clean up any legacy sessionStorage keys
+      sessionStorage.removeItem('outlook_session_auth');
+      sessionStorage.removeItem('outlook_session_user');
+      sessionStorage.removeItem('outlook_session_pass_b64');
+      sessionStorage.removeItem('outlook_last_activity');
+    }
+  };
+
+  let currentServerBootId = null;
+
+  async function fetchServerBootId() {
+    try {
+      const res = await originalFetch('/api/server-boot-id', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.bootId) {
+          currentServerBootId = data.bootId;
+          return data.bootId;
+        }
+      }
+    } catch (e) {}
+    return currentServerBootId;
+  }
+
   // Intercept fetch to attach active session credentials on Vercel Serverless
   const originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init = {}) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     if (url.startsWith('/api/')) {
-      const sUser = sessionStorage.getItem('outlook_session_user');
-      const sPass = sessionStorage.getItem('outlook_session_pass_b64');
+      const sUser = SESSION_STORE.getUser();
+      const sPass = SESSION_STORE.getPass();
       if (sUser && sPass) {
         const headers = new Headers(init.headers || {});
         if (!headers.has('x-imap-user')) headers.set('x-imap-user', sUser);
@@ -178,12 +232,18 @@
     setupEventListeners();
     await loadConfig();
 
-    // Show login screen on startup unless already authenticated in this browser tab session
-    const isSessionAuth = sessionStorage.getItem('outlook_session_auth') === 'true';
-    const savedLastActivity = Number(sessionStorage.getItem('outlook_last_activity') || 0);
-    const isExpiredByInactivity = savedLastActivity > 0 && (Date.now() - savedLastActivity >= INACTIVITY_LIMIT_MS);
+    // Single daily login / valid until computer (server) restart — no 30-min inactivity logout
+    const serverBootId = await fetchServerBootId();
+    const isSessionAuth = SESSION_STORE.getAuth() === 'true';
+    const storedBootId = SESSION_STORE.getBootId();
+    const storedLoginDate = SESSION_STORE.getLoginDate();
+    const todayKey = getTodayDateKey();
 
-    if (isSessionAuth && !isExpiredByInactivity) {
+    const serverRestarted = Boolean(serverBootId && storedBootId && storedBootId !== serverBootId);
+    const isDifferentDay = Boolean(storedLoginDate && storedLoginDate !== todayKey);
+    const missingBootOrDate = Boolean(isSessionAuth && (!storedBootId || !storedLoginDate));
+
+    if (isSessionAuth && !serverRestarted && !isDifferentDay && !missingBootOrDate) {
       if (elLoginOverlay) elLoginOverlay.style.display = 'none';
       await loadFolders();
       await loadMessages();
@@ -191,10 +251,12 @@
       loadCalendarEvents();
       loadTodos();
       startAutoSync();
-      startInactivityMonitor();
-    } else if (isSessionAuth && isExpiredByInactivity) {
-      endUserSession('Sessão encerrada automaticamente após 30 minutos de inatividade.');
+    } else if (isSessionAuth && serverRestarted) {
+      endUserSession('O computador/servidor foi reiniciado. Faça login novamente.');
+    } else if (isSessionAuth && isDifferentDay) {
+      endUserSession('Novo dia iniciado. Faça login para o acesso de hoje.');
     } else {
+      if (isSessionAuth) SESSION_STORE.clearAll();
       showLoginScreen();
     }
 
@@ -264,65 +326,6 @@
     box.style.display = 'block';
   }
 
-  const INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
-  let lastActivityTime = Date.now();
-  let inactivityCheckTimer = null;
-  let lastActivityStorageWrite = 0;
-
-  function startInactivityMonitor() {
-    const now = Date.now();
-    lastActivityTime = now;
-    lastActivityStorageWrite = now;
-    try {
-      sessionStorage.setItem('outlook_last_activity', String(now));
-    } catch (e) {}
-
-    if (inactivityCheckTimer) clearInterval(inactivityCheckTimer);
-    inactivityCheckTimer = setInterval(checkInactivityTimeout, 15000);
-  }
-
-  function stopInactivityMonitor() {
-    if (inactivityCheckTimer) {
-      clearInterval(inactivityCheckTimer);
-      inactivityCheckTimer = null;
-    }
-  }
-
-  function checkInactivityTimeout() {
-    if (sessionStorage.getItem('outlook_session_auth') !== 'true') return;
-    const stored = Number(sessionStorage.getItem('outlook_last_activity') || 0);
-    if (stored > lastActivityTime) {
-      lastActivityTime = stored;
-    }
-    if (Date.now() - lastActivityTime >= INACTIVITY_LIMIT_MS) {
-      endUserSession('Sessão encerrada automaticamente após 30 minutos de inatividade.');
-    }
-  }
-
-  function handleUserActivity() {
-    if (sessionStorage.getItem('outlook_session_auth') !== 'true') return;
-    if (elLoginOverlay && elLoginOverlay.style.display === 'flex') return;
-
-    const now = Date.now();
-    const stored = Number(sessionStorage.getItem('outlook_last_activity') || 0);
-    if (stored > lastActivityTime) {
-      lastActivityTime = stored;
-    }
-
-    if (now - lastActivityTime >= INACTIVITY_LIMIT_MS) {
-      endUserSession('Sessão encerrada automaticamente após 30 minutos de inatividade.');
-      return;
-    }
-
-    lastActivityTime = now;
-    if (now - lastActivityStorageWrite > 2000) {
-      lastActivityStorageWrite = now;
-      try {
-        sessionStorage.setItem('outlook_last_activity', String(now));
-      } catch (e) {}
-    }
-  }
-
   function toggleMobileFoldersDrawer(forceState) {
     const foldersPane = document.getElementById('foldersPane');
     const backdrop = document.getElementById('mobileDrawerBackdrop');
@@ -337,17 +340,13 @@
   }
 
   function endUserSession(reasonMessage = '') {
-    sessionStorage.removeItem('outlook_session_auth');
-    sessionStorage.removeItem('outlook_session_user');
-    sessionStorage.removeItem('outlook_session_pass_b64');
-    sessionStorage.removeItem('outlook_last_activity');
+    SESSION_STORE.clearAll();
 
     if (autoSyncTimer) {
       clearInterval(autoSyncTimer);
       autoSyncTimer = null;
     }
     stopDraftAutoSaveTimer();
-    stopInactivityMonitor();
     toggleMobileFoldersDrawer(false);
     closeMobileReadingPane();
 
@@ -425,11 +424,14 @@
       const data = await res.json();
 
       if (data.success) {
-        sessionStorage.setItem('outlook_session_auth', 'true');
-        sessionStorage.setItem('outlook_session_user', email);
+        const bootId = await fetchServerBootId();
+        SESSION_STORE.setAuth('true');
+        SESSION_STORE.setUser(email);
         try {
-          sessionStorage.setItem('outlook_session_pass_b64', btoa(unescape(encodeURIComponent(password))));
+          SESSION_STORE.setPass(btoa(unescape(encodeURIComponent(password))));
         } catch (e) {}
+        if (bootId) SESSION_STORE.setBootId(bootId);
+        SESSION_STORE.setLoginDate(getTodayDateKey());
 
         if (rememberEmail) {
           localStorage.setItem('outlook_last_email', email);
@@ -453,7 +455,6 @@
         loadCalendarEvents();
         loadTodos();
         startAutoSync();
-        startInactivityMonitor();
       } else {
         if (elLoginErrorBox) {
           elLoginErrorBox.style.display = 'block';
@@ -646,7 +647,7 @@
 
   async function backgroundSyncEmails() {
     if (isBackgroundSyncing) return;
-    if (sessionStorage.getItem('outlook_session_auth') !== 'true') return;
+    if (SESSION_STORE.getAuth() !== 'true') return;
     if (elLoginOverlay && elLoginOverlay.style.display === 'flex') return;
 
     isBackgroundSyncing = true;
@@ -1922,17 +1923,27 @@
   // Contacts Management
   // ========================
   let contactsList = [];
+  let contactGroupsList = [];
   let contactsSearchQuery = '';
+  let currentContactsTab = 'all'; // 'all' | 'contacts' | 'groups'
 
   function getContactsStorageKey() {
-    const user = (sessionStorage.getItem('outlook_session_user') || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
+    const user = (SESSION_STORE.getUser() || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
     return 'outlook_contacts_' + user;
   }
 
   function updateContactsDatalist() {
     const dl = document.getElementById('contactsDatalist');
     if (!dl) return;
-    dl.innerHTML = contactsList.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name || c.email)}</option>`).join('');
+    // Individual contacts
+    const contactOptions = contactsList.map(c =>
+      `<option value="${escapeHtml(c.email)}">${escapeHtml(c.name || c.email)}</option>`
+    );
+    // Groups — value = group name so it can be expanded later
+    const groupOptions = contactGroupsList.map(g =>
+      `<option value="${escapeHtml(g.name)}" data-group-id="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${g.members.length} membros)</option>`
+    );
+    dl.innerHTML = [...groupOptions, ...contactOptions].join('');
   }
 
   function renderContactsList() {
@@ -1941,7 +1952,9 @@
     if (!container) return;
 
     const q = contactsSearchQuery.trim().toLowerCase();
-    const filtered = q
+
+    // Filter individual contacts
+    const filteredContacts = q
       ? contactsList.filter(c =>
           (c.name && c.name.toLowerCase().includes(q)) ||
           (c.email && c.email.toLowerCase().includes(q)) ||
@@ -1950,15 +1963,46 @@
         )
       : contactsList;
 
+    // Filter groups
+    const filteredGroups = q
+      ? contactGroupsList.filter(g =>
+          (g.name && g.name.toLowerCase().includes(q)) ||
+          (g.description && g.description.toLowerCase().includes(q)) ||
+          (g.members && g.members.some(m => m.toLowerCase().includes(q)))
+        )
+      : contactGroupsList;
+
+    // Update tab badge counts
+    const tabAll = document.getElementById('contactsTabAllCount');
+    const tabIndiv = document.getElementById('contactsTabIndivCount');
+    const tabGroups = document.getElementById('contactsTabGroupsCount');
+    if (tabAll) tabAll.textContent = filteredContacts.length + filteredGroups.length;
+    if (tabIndiv) tabIndiv.textContent = filteredContacts.length;
+    if (tabGroups) tabGroups.textContent = filteredGroups.length;
+
+    // Update total label
+    const totalShown = currentContactsTab === 'groups'
+      ? filteredGroups.length
+      : currentContactsTab === 'contacts'
+      ? filteredContacts.length
+      : filteredContacts.length + filteredGroups.length;
+
     if (countEl) {
-      countEl.textContent = `${filtered.length} ${filtered.length === 1 ? 'contato' : 'contatos'}`;
+      countEl.textContent = `${filteredContacts.length} contato(s), ${filteredGroups.length} grupo(s)`;
     }
 
-    if (filtered.length === 0) {
+    // Decide what to render
+    const showContacts = currentContactsTab === 'all' || currentContactsTab === 'contacts';
+    const showGroups   = currentContactsTab === 'all' || currentContactsTab === 'groups';
+
+    const toRenderContacts = showContacts ? filteredContacts : [];
+    const toRenderGroups   = showGroups   ? filteredGroups   : [];
+
+    if (toRenderContacts.length === 0 && toRenderGroups.length === 0) {
       container.innerHTML = `
         <div style="padding: 48px 20px; text-align: center; color: var(--text-secondary);">
           <i class="fa-regular fa-address-book" style="font-size: 40px; opacity: 0.4; margin-bottom: 12px; display: block;"></i>
-          <p style="font-size: 14px; margin-bottom: 12px;">${q ? 'Nenhum contato encontrado para essa busca.' : 'Nenhum contato salvo ainda.'}</p>
+          <p style="font-size: 14px; margin-bottom: 12px;">${q ? 'Nenhum resultado encontrado para essa busca.' : 'Nenhum contato ou grupo salvo ainda.'}</p>
           ${!q ? `<button type="button" class="action-btn primary" id="btnEmptySyncContacts" style="margin: 0 auto;"><i class="fa-solid fa-rotate"></i> <span>Sincronizar Contatos do Servidor</span></button>` : ''}
         </div>
       `;
@@ -1968,7 +2012,58 @@
     }
 
     container.innerHTML = '';
-    filtered.forEach(contact => {
+
+    // Render groups first
+    toRenderGroups.forEach(group => {
+      const row = document.createElement('div');
+      row.className = 'contact-row';
+      row.style.background = 'linear-gradient(to right, rgba(92,45,145,0.03), transparent)';
+      const membersPreview = group.members.slice(0, 3).join('; ') + (group.members.length > 3 ? ` +${group.members.length - 3} mais` : '');
+      row.innerHTML = `
+        <div class="ct-col ct-col-name">
+          <div class="ct-avatar group-avatar" title="Grupo de Envio"><i class="fa-solid fa-users" style="font-size:12px;"></i></div>
+          <span>
+            ${escapeHtml(group.name)}
+            <span class="ct-badge-group"><i class="fa-solid fa-users" style="font-size:9px;"></i> Grupo</span>
+          </span>
+        </div>
+        <div class="ct-col ct-col-email" title="${escapeHtml(group.members.join('; '))}">
+          <span class="ct-group-members-count">${group.members.length} membro(s)</span>
+        </div>
+        <div class="ct-col ct-col-phone ct-group-members-preview" style="font-size:11px; white-space:normal; line-height:1.3;" title="${escapeHtml(group.members.join('; '))}">
+          ${escapeHtml(membersPreview || '—')}
+        </div>
+        <div class="ct-col ct-col-company">
+          <span class="ct-badge-group-pill">${group.description ? escapeHtml(group.description.slice(0, 30)) + (group.description.length > 30 ? '...' : '') : 'Lista de distribuição'}</span>
+        </div>
+        <div class="ct-col ct-col-actions">
+          <button type="button" class="action-btn btn-grp-mail" title="Enviar e-mail para este grupo" style="padding: 4px 8px;">
+            <i class="fa-regular fa-paper-plane" style="color: #5c2d91;"></i>
+          </button>
+          <button type="button" class="action-btn btn-grp-edit" title="Editar grupo" style="padding: 4px 8px;">
+            <i class="fa-regular fa-pen-to-square"></i>
+          </button>
+          <button type="button" class="action-btn btn-grp-del" title="Excluir grupo" style="padding: 4px 8px; color: #a80000;">
+            <i class="fa-regular fa-trash-can"></i>
+          </button>
+        </div>
+      `;
+
+      row.querySelector('.btn-grp-mail').onclick = () => {
+        openCompose({ to: group.members.join(', ') });
+      };
+      row.querySelector('.btn-grp-edit').onclick = () => {
+        openContactGroupModal(group);
+      };
+      row.querySelector('.btn-grp-del').onclick = () => {
+        deleteContactGroup(group.id, group.name);
+      };
+
+      container.appendChild(row);
+    });
+
+    // Render individual contacts
+    toRenderContacts.forEach(contact => {
       const row = document.createElement('div');
       row.className = 'contact-row';
       row.innerHTML = `
@@ -2022,9 +2117,200 @@
         } catch (e) {}
       }
       updateContactsDatalist();
+      await loadContactGroups();
       renderContactsList();
     } catch (err) {
       console.warn('Erro ao carregar contatos:', err);
+    }
+  }
+
+  async function loadContactGroups() {
+    try {
+      const res = await fetch('/api/contact-groups');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.groups)) {
+        contactGroupsList = data.groups;
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar grupos de contatos:', err);
+    }
+  }
+
+  function renderContactGroupsPicker(selectedEmails = []) {
+    const picker = document.getElementById('groupContactsPicker');
+    if (!picker) return;
+    const filterVal = (document.getElementById('groupPickerFilter')?.value || '').toLowerCase();
+    const filtered = filterVal
+      ? contactsList.filter(c =>
+          (c.name && c.name.toLowerCase().includes(filterVal)) ||
+          (c.email && c.email.toLowerCase().includes(filterVal))
+        )
+      : contactsList;
+
+    if (filtered.length === 0) {
+      picker.innerHTML = `<div style="padding: 10px; color: var(--text-secondary); font-size: 12px; text-align:center;">Nenhum contato disponível.</div>`;
+      return;
+    }
+
+    picker.innerHTML = filtered.map(c => {
+      const isChecked = selectedEmails.includes(c.email.toLowerCase());
+      return `
+        <label class="group-contact-item" for="picker_${CSS.escape(c.email)}">
+          <input type="checkbox" id="picker_${CSS.escape(c.email)}" value="${escapeHtml(c.email)}" ${isChecked ? 'checked' : ''}>
+          <div class="group-contact-info">
+            <span class="group-contact-name">${escapeHtml(c.name || c.email.split('@')[0])}</span>
+            <span class="group-contact-email">${escapeHtml(c.email)}</span>
+          </div>
+        </label>
+      `;
+    }).join('');
+
+    // Sync picker checkboxes with group member chips
+    picker.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const email = cb.value;
+        if (cb.checked) {
+          groupMemberManager && groupMemberManager.add(email);
+        } else {
+          // Remove from chips by rebuilding from remaining checked
+          if (groupMemberManager) {
+            const allChecked = Array.from(picker.querySelectorAll('input[type="checkbox"]:checked')).map(el => el.value);
+            const currentChips = groupMemberManager.getAllEmails();
+            // remove unchecked
+            currentChips.forEach(em => {
+              if (em.toLowerCase() === email.toLowerCase()) {
+                // find chip to remove — rebuild
+              }
+            });
+            // simplest: remove and re-add all checked
+            groupMemberManager.clear();
+            allChecked.forEach(em => groupMemberManager.add(em));
+          }
+        }
+        updateGroupMembersCount();
+      });
+    });
+  }
+
+  let groupMemberManager = null;
+
+  function updateGroupMembersCount() {
+    const badge = document.getElementById('groupMembersCountBadge');
+    if (!badge) return;
+    const count = groupMemberManager ? groupMemberManager.getAllEmails().length : 0;
+    badge.textContent = count;
+  }
+
+  function openContactGroupModal(group = null) {
+    const modal = document.getElementById('contactGroupModal');
+    const titleEl = document.getElementById('contactGroupModalTitle');
+    const idEl = document.getElementById('contactGroupId');
+    const nameEl = document.getElementById('contactGroupNameInput');
+    const descEl = document.getElementById('contactGroupDescInput');
+    const btnDel = document.getElementById('btnDeleteContactGroup');
+    if (!modal) return;
+
+    if (group) {
+      if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-users" style="color:#5c2d91;margin-right:8px;"></i>Editar Grupo de Envio';
+      if (idEl) idEl.value = group.id || '';
+      if (nameEl) nameEl.value = group.name || '';
+      if (descEl) descEl.value = group.description || '';
+      if (btnDel) btnDel.style.display = '';
+    } else {
+      if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-users" style="color:#5c2d91;margin-right:8px;"></i>Novo Grupo de Envio';
+      if (idEl) idEl.value = '';
+      if (nameEl) nameEl.value = '';
+      if (descEl) descEl.value = '';
+      if (btnDel) btnDel.style.display = 'none';
+    }
+
+    // Init group member chip manager
+    if (groupMemberManager) groupMemberManager.clear();
+    groupMemberManager = createRecipientChipManager({
+      containerId: 'containerGroupMembers',
+      inputId: 'groupMemberInput',
+      hiddenId: null,
+      nextFocusId: null,
+      onUpdate: updateGroupMembersCount
+    });
+
+    // Pre-load existing members
+    if (group && group.members) {
+      group.members.forEach(email => groupMemberManager.add(email));
+    }
+    updateGroupMembersCount();
+
+    // Render contacts picker
+    const selectedEmails = (group && group.members) ? group.members.map(e => e.toLowerCase()) : [];
+    renderContactGroupsPicker(selectedEmails);
+
+    // Clear picker filter
+    const pickerFilter = document.getElementById('groupPickerFilter');
+    if (pickerFilter) pickerFilter.value = '';
+
+    modal.style.display = 'flex';
+    if (nameEl) nameEl.focus();
+  }
+
+  async function saveContactGroup(e) {
+    e.preventDefault();
+    const idEl = document.getElementById('contactGroupId');
+    const nameEl = document.getElementById('contactGroupNameInput');
+    const descEl = document.getElementById('contactGroupDescInput');
+    const id = idEl?.value?.trim() || '';
+    const name = nameEl?.value?.trim() || '';
+    const description = descEl?.value?.trim() || '';
+
+    if (!name) { alert('O nome do grupo é obrigatório.'); return; }
+
+    // Collect members from chip manager
+    const members = groupMemberManager ? groupMemberManager.getAllEmails() : [];
+    if (members.length === 0) {
+      if (!confirm('O grupo não tem membros ainda. Salvar assim mesmo?')) return;
+    }
+
+    const payload = { name, description, members };
+    if (id) payload.id = id;
+
+    try {
+      const res = await fetch('/api/contact-groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        contactGroupsList = data.groups || [];
+        updateContactsDatalist();
+        renderContactsList();
+        const modal = document.getElementById('contactGroupModal');
+        if (modal) modal.style.display = 'none';
+        showToast(`Grupo "${name}" salvo com sucesso! (${members.length} membro(s))`);
+      } else {
+        alert(data.error || 'Não foi possível salvar o grupo.');
+      }
+    } catch (err) {
+      alert('Erro ao salvar grupo: ' + err.message);
+    }
+  }
+
+  async function deleteContactGroup(id, name) {
+    if (!confirm(`Deseja realmente excluir o grupo "${name}"?`)) return;
+    try {
+      const res = await fetch(`/api/contact-groups/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        contactGroupsList = data.groups || [];
+        updateContactsDatalist();
+        renderContactsList();
+        const modal = document.getElementById('contactGroupModal');
+        if (modal) modal.style.display = 'none';
+        showToast(`Grupo "${name}" excluído.`);
+      } else {
+        alert(data.error || 'Erro ao excluir grupo.');
+      }
+    } catch (err) {
+      alert('Erro ao excluir grupo: ' + err.message);
     }
   }
 
@@ -2151,7 +2437,7 @@
   }
 
   function getCalendarStorageKey() {
-    const user = (sessionStorage.getItem('outlook_session_user') || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
+    const user = (SESSION_STORE.getUser() || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
     return 'outlook_calendar_' + user;
   }
 
@@ -2425,7 +2711,7 @@
   let todoQuickImportant = false;
 
   function getTodosStorageKey() {
-    const user = (sessionStorage.getItem('outlook_session_user') || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
+    const user = (SESSION_STORE.getUser() || document.getElementById('cfgImapUser')?.value || 'default').trim().toLowerCase();
     return 'outlook_todos_' + user;
   }
 
@@ -2727,6 +3013,21 @@
       if (!rawText) return;
       const parts = String(rawText).split(/[,;\n\r\t]+/).map(p => cleanRecipientAddress(p)).filter(Boolean);
       parts.forEach(clean => {
+        // Check if this token matches a contact group name → expand into member emails
+        if (typeof contactGroupsList !== 'undefined' && contactGroupsList.length > 0) {
+          const matchedGroup = contactGroupsList.find(g => g.name.toLowerCase() === clean.toLowerCase());
+          if (matchedGroup && matchedGroup.members && matchedGroup.members.length > 0) {
+            matchedGroup.members.forEach(memberEmail => {
+              if (!chips.some(c => c.text.toLowerCase() === memberEmail.toLowerCase())) {
+                const chip = { id: ++idCounter, text: memberEmail, isValid: isValidEmailAddress(memberEmail) };
+                chips.push(chip);
+                if (container && input) container.insertBefore(renderChipElement(chip), input);
+              }
+            });
+            syncHiddenValue();
+            return;
+          }
+        }
         if (chips.some(c => c.text.toLowerCase() === clean.toLowerCase())) {
           return;
         }
@@ -3154,7 +3455,7 @@
         readingPaneLayout = data.layout.readingPane;
       }
       applyReadingPaneLayout(readingPaneLayout);
-      const activeEmail = (data.imap?.user || sessionStorage.getItem('outlook_session_user') || '').toLowerCase();
+      const activeEmail = (data.imap?.user || SESSION_STORE.getUser() || '').toLowerCase();
       if (activeEmail) {
         const localSig = localStorage.getItem('outlook_sig_' + activeEmail);
         if (localSig) {
@@ -3176,7 +3477,7 @@
       sigState.html = elSigEditor.innerHTML;
     }
 
-    const activeUser = (document.getElementById('cfgImapUser')?.value || sessionStorage.getItem('outlook_session_user') || '').trim().toLowerCase();
+    const activeUser = (document.getElementById('cfgImapUser')?.value || SESSION_STORE.getUser() || '').trim().toLowerCase();
     if (activeUser) {
       try {
         localStorage.setItem('outlook_sig_' + activeUser, JSON.stringify(sigState));
@@ -3647,14 +3948,21 @@
     }
 
     const btnNewContact = document.getElementById('btnNewContact');
+    const btnNewContactGroup = document.getElementById('btnNewContactGroup');
     const btnSyncContacts = document.getElementById('btnSyncContacts');
     const contactsSearchInput = document.getElementById('contactsSearchInput');
     const contactForm = document.getElementById('contactForm');
     const btnCloseContactModal = document.getElementById('btnCloseContactModal');
     const btnCancelContactModal = document.getElementById('btnCancelContactModal');
     const contactModal = document.getElementById('contactModal');
+    const contactGroupForm = document.getElementById('contactGroupForm');
+    const btnCloseContactGroupModal = document.getElementById('btnCloseContactGroupModal');
+    const btnCancelContactGroupModal = document.getElementById('btnCancelContactGroupModal');
+    const contactGroupModal = document.getElementById('contactGroupModal');
+    const btnDeleteContactGroup = document.getElementById('btnDeleteContactGroup');
 
     if (btnNewContact) btnNewContact.onclick = () => openContactModal(null);
+    if (btnNewContactGroup) btnNewContactGroup.onclick = () => openContactGroupModal(null);
     if (btnSyncContacts) btnSyncContacts.onclick = () => syncContactsFromServer();
     if (contactsSearchInput) {
       contactsSearchInput.oninput = (e) => {
@@ -3669,6 +3977,50 @@
     if (btnCancelContactModal && contactModal) {
       btnCancelContactModal.onclick = () => { contactModal.style.display = 'none'; };
     }
+    if (contactGroupForm) contactGroupForm.onsubmit = saveContactGroup;
+    if (btnCloseContactGroupModal && contactGroupModal) {
+      btnCloseContactGroupModal.onclick = () => { contactGroupModal.style.display = 'none'; };
+    }
+    if (btnCancelContactGroupModal && contactGroupModal) {
+      btnCancelContactGroupModal.onclick = () => { contactGroupModal.style.display = 'none'; };
+    }
+    if (btnDeleteContactGroup) {
+      btnDeleteContactGroup.onclick = () => {
+        const id = document.getElementById('contactGroupId')?.value || '';
+        const name = document.getElementById('contactGroupNameInput')?.value || '';
+        if (id) deleteContactGroup(id, name);
+      };
+    }
+
+    // Clear group members button
+    const btnClearGroupMembers = document.getElementById('btnClearGroupMembers');
+    if (btnClearGroupMembers) {
+      btnClearGroupMembers.onclick = () => {
+        if (groupMemberManager) groupMemberManager.clear();
+        updateGroupMembersCount();
+        // Uncheck all picker checkboxes
+        document.querySelectorAll('#groupContactsPicker input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+      };
+    }
+
+    // Group picker filter
+    const groupPickerFilter = document.getElementById('groupPickerFilter');
+    if (groupPickerFilter) {
+      groupPickerFilter.oninput = () => {
+        const selectedEmails = groupMemberManager ? groupMemberManager.getAllEmails().map(e => e.toLowerCase()) : [];
+        renderContactGroupsPicker(selectedEmails);
+      };
+    }
+
+    // Contacts filter tabs
+    document.querySelectorAll('.contacts-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.contacts-tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentContactsTab = btn.dataset.tab || 'all';
+        renderContactsList();
+      });
+    });
 
     elBtnReply.onclick = () => {
       if (!selectedMessage) return;
@@ -3749,6 +4101,120 @@
       attachedFiles = Array.from(e.target.files);
       elComposeAttachedFilesCount.textContent = attachedFiles.length > 0 ? `${attachedFiles.length} anexo(s)` : '';
     };
+
+    // ── Insert Table Popover ──────────────────────────────────────
+    (function setupTableInserter() {
+      const ROWS = 6, COLS = 8;
+      const wrap     = document.getElementById('tableInsertWrap');
+      const popover  = document.getElementById('tablePickerPopover');
+      const grid     = document.getElementById('tablePickerGrid');
+      const label    = document.getElementById('tablePickerLabel');
+      const btn      = document.getElementById('btnInsertTable');
+      const manRows  = document.getElementById('tableManualRows');
+      const manCols  = document.getElementById('tableManualCols');
+      const btnManual= document.getElementById('btnInsertTableManual');
+      if (!btn || !popover || !grid) return;
+
+      // Build grid cells
+      for (let r = 1; r <= ROWS; r++) {
+        for (let c = 1; c <= COLS; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'table-picker-cell';
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          grid.appendChild(cell);
+        }
+      }
+
+      function highlightCells(maxR, maxC) {
+        grid.querySelectorAll('.table-picker-cell').forEach(cell => {
+          const r = +cell.dataset.row, c = +cell.dataset.col;
+          cell.classList.toggle('hovered', r <= maxR && c <= maxC);
+        });
+        if (label) label.textContent = `${maxR} × ${maxC}`;
+      }
+
+      grid.addEventListener('mouseover', e => {
+        const cell = e.target.closest('.table-picker-cell');
+        if (cell) highlightCells(+cell.dataset.row, +cell.dataset.col);
+      });
+
+      grid.addEventListener('mouseleave', () => highlightCells(0, 0));
+
+      grid.addEventListener('click', e => {
+        const cell = e.target.closest('.table-picker-cell');
+        if (cell) {
+          insertTable(+cell.dataset.row, +cell.dataset.col);
+          closePopover();
+        }
+      });
+
+      if (btnManual) {
+        btnManual.onclick = () => {
+          const r = Math.max(1, Math.min(20, parseInt(manRows?.value) || 3));
+          const c = Math.max(1, Math.min(10, parseInt(manCols?.value) || 3));
+          insertTable(r, c);
+          closePopover();
+        };
+      }
+
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const isOpen = popover.style.display !== 'none';
+        closePopover();
+        if (!isOpen) {
+          popover.style.display = '';
+          highlightCells(0, 0);
+        }
+      });
+
+      function closePopover() {
+        if (popover) popover.style.display = 'none';
+      }
+
+      document.addEventListener('click', e => {
+        if (!wrap?.contains(e.target)) closePopover();
+      });
+
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closePopover();
+      });
+
+      function insertTable(rows, cols) {
+        const editor = document.getElementById('composeEditor');
+        if (!editor) return;
+        editor.focus();
+
+        // Build table HTML
+        const headerRow = `<tr>${Array.from({length: cols}, () =>
+          `<th style="border:1px solid #adb5bd;padding:6px 10px;background:#e9f0fb;font-weight:700;min-width:60px;">​</th>`
+        ).join('')}</tr>`;
+        const bodyRows = Array.from({length: rows - 1}, () =>
+          `<tr>${Array.from({length: cols}, () =>
+            `<td style="border:1px solid #adb5bd;padding:6px 10px;min-width:60px;">​</td>`
+          ).join('')}</tr>`
+        ).join('');
+
+        const tableHtml = `<table style="border-collapse:collapse;width:auto;max-width:100%;margin:8px 0;"><tbody>${headerRow}${bodyRows}</tbody></table><p><br></p>`;
+
+        // Restore saved selection or insert at cursor
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          if (editor.contains(range.commonAncestorContainer)) {
+            range.deleteContents();
+            const frag = range.createContextualFragment(tableHtml);
+            range.insertNode(frag);
+            sel.collapseToEnd();
+            return;
+          }
+        }
+        // Fallback: append at end
+        editor.insertAdjacentHTML('beforeend', tableHtml);
+        editor.scrollTop = editor.scrollHeight;
+      }
+    })();
+    // ── End Insert Table ──────────────────────────────────────────
 
     // Compose Toolbar Signature Buttons
     const btnInsertSignatureNow = document.getElementById('btnInsertSignatureNow');
@@ -4037,17 +4503,6 @@
     const triggerAccountSwitch = () => {
       endUserSession();
     };
-
-    // 30-minute inactivity auto-logout listeners
-    ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'wheel'].forEach(evtName => {
-      document.addEventListener(evtName, handleUserActivity, { passive: true });
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        checkInactivityTimeout();
-      }
-    });
-    window.addEventListener('focus', checkInactivityTimeout);
 
     const elBtnToggleTheme = document.getElementById('btnToggleTheme');
     const elThemeToggleIcon = document.getElementById('themeToggleIcon');
