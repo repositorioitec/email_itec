@@ -165,11 +165,13 @@ class SmtpService {
     const initialPort = parseInt(this.config.smtp?.port, 10) || 465;
     const portsToTry = initialPort === 465 ? [465, 587] : [587, 465];
 
+    const cleanRecipients = (val) => val ? String(val).replace(/;/g, ',').trim() : undefined;
+
     const mailOptions = {
       from: `"${this.config.smtp?.user?.split('@')[0] || 'Clodoaldo Silva'}" <${this.config.smtp?.user}>`,
-      to,
-      cc,
-      bcc,
+      to: cleanRecipients(to),
+      cc: cleanRecipients(cc),
+      bcc: cleanRecipients(bcc),
       subject,
       text,
       html,

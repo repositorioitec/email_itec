@@ -2655,6 +2655,215 @@
     }
   }
 
+  // =========================================================
+  // Recipient Chip Input Manager (Para & Cc Multiple Emails)
+  // =========================================================
+  function isValidEmailAddress(email) {
+    if (!email || typeof email !== 'string') return false;
+    let clean = email.trim();
+    if (clean.includes('<') && clean.includes('>')) {
+      const match = clean.match(/<([^>]+)>/);
+      if (match && match[1]) clean = match[1].trim();
+    }
+    return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(clean);
+  }
+
+  function cleanRecipientAddress(raw) {
+    if (!raw) return '';
+    let clean = raw.trim().replace(/^[,;\s]+|[,;\s]+$/g, '');
+    if (clean.includes('<') && clean.includes('>')) {
+      const match = clean.match(/<([^>]+)>/);
+      if (match && match[1]) return match[1].trim();
+    }
+    return clean;
+  }
+
+  function createRecipientChipManager({ containerId, inputId, hiddenId, nextFocusId, onUpdate }) {
+    const container = document.getElementById(containerId);
+    const input = document.getElementById(inputId);
+    const hidden = document.getElementById(hiddenId);
+    let chips = [];
+    let idCounter = 0;
+
+    function syncHiddenValue() {
+      const val = chips.map(c => c.text).join(', ');
+      if (hidden) hidden.value = val;
+      if (onUpdate) onUpdate(val);
+    }
+
+    function renderChipElement(chip) {
+      const el = document.createElement('div');
+      el.className = `recipient-chip ${chip.isValid ? 'valid' : 'invalid'}`;
+      el.setAttribute('data-chip-id', String(chip.id));
+      el.title = chip.isValid
+        ? 'E-mail válido (clique para editar)'
+        : 'Formato de e-mail inválido! Clique para corrigir ou no "×" para remover.';
+
+      el.innerHTML = `
+        <i class="chip-status-icon fa-solid ${chip.isValid ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i>
+        <span class="chip-text">${escapeHtml(chip.text)}</span>
+        <button type="button" class="chip-remove-btn" title="Remover">&times;</button>
+      `;
+
+      el.onclick = (e) => {
+        e.stopPropagation();
+        if (e.target.closest('.chip-remove-btn')) {
+          removeChip(chip.id);
+        } else {
+          const currentText = chip.text;
+          removeChip(chip.id);
+          if (input) {
+            input.value = currentText;
+            input.focus();
+            input.select();
+          }
+        }
+      };
+
+      return el;
+    }
+
+    function addChip(rawText) {
+      if (!rawText) return;
+      const parts = String(rawText).split(/[,;\n\r\t]+/).map(p => cleanRecipientAddress(p)).filter(Boolean);
+      parts.forEach(clean => {
+        if (chips.some(c => c.text.toLowerCase() === clean.toLowerCase())) {
+          return;
+        }
+        const isValid = isValidEmailAddress(clean);
+        const chip = { id: ++idCounter, text: clean, isValid };
+        chips.push(chip);
+        if (container && input) {
+          container.insertBefore(renderChipElement(chip), input);
+        }
+      });
+      syncHiddenValue();
+    }
+
+    function removeChip(chipId) {
+      chips = chips.filter(c => c.id !== chipId);
+      if (container) {
+        const el = container.querySelector(`.recipient-chip[data-chip-id="${chipId}"]`);
+        if (el) el.remove();
+      }
+      syncHiddenValue();
+    }
+
+    function clear() {
+      chips = [];
+      if (container) {
+        container.querySelectorAll('.recipient-chip').forEach(c => c.remove());
+      }
+      if (input) input.value = '';
+      syncHiddenValue();
+    }
+
+    function setFromText(text) {
+      clear();
+      if (text) addChip(text);
+    }
+
+    function commitInput() {
+      if (!input) return;
+      const val = input.value.trim();
+      if (val) {
+        addChip(val);
+        input.value = '';
+      }
+    }
+
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ';' || e.key === ',') {
+          e.preventDefault();
+          const val = input.value.trim();
+          if (val) {
+            addChip(val);
+            input.value = '';
+          } else if (e.key === 'Enter' && nextFocusId) {
+            const nextEl = document.getElementById(nextFocusId);
+            if (nextEl) nextEl.focus();
+          }
+        } else if (e.key === 'Tab') {
+          const val = input.value.trim();
+          if (val) {
+            e.preventDefault();
+            addChip(val);
+            input.value = '';
+          }
+        } else if (e.key === 'Backspace' && !input.value && chips.length > 0) {
+          const lastChip = chips[chips.length - 1];
+          removeChip(lastChip.id);
+          input.value = lastChip.text;
+          input.select();
+        }
+      });
+
+      input.addEventListener('paste', (e) => {
+        const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+        if (text && (text.includes(';') || text.includes(',') || text.includes('\n') || text.includes(' '))) {
+          e.preventDefault();
+          addChip(text);
+          input.value = '';
+        }
+      });
+
+      input.addEventListener('input', () => {
+        const val = input.value;
+        if (val.includes(';') || val.includes(',')) {
+          addChip(val);
+          input.value = '';
+        }
+      });
+
+      input.addEventListener('change', () => {
+        commitInput();
+      });
+
+      input.addEventListener('blur', () => {
+        commitInput();
+      });
+    }
+
+    if (container) {
+      container.addEventListener('click', (e) => {
+        if (input && !e.target.closest('.recipient-chip')) {
+          input.focus();
+        }
+      });
+    }
+
+    return {
+      add: addChip,
+      remove: removeChip,
+      clear,
+      setFromText,
+      commitInput,
+      focus: () => { if (input) input.focus(); },
+      getAllEmails: () => chips.map(c => c.text),
+      getValidEmails: () => chips.filter(c => c.isValid).map(c => c.text),
+      getInvalidEmails: () => chips.filter(c => !c.isValid).map(c => c.text)
+    };
+  }
+
+  let recipientManagerTo = null;
+  let recipientManagerCc = null;
+
+  function initRecipientChipManagers() {
+    recipientManagerTo = createRecipientChipManager({
+      containerId: 'containerComposeTo',
+      inputId: 'composeToInput',
+      hiddenId: 'composeTo',
+      nextFocusId: 'composeCcInput'
+    });
+    recipientManagerCc = createRecipientChipManager({
+      containerId: 'containerComposeCc',
+      inputId: 'composeCcInput',
+      hiddenId: 'composeCc',
+      nextFocusId: 'composeSubject'
+    });
+  }
+
   // Compose & 2-Minute Draft Auto-Save Functions
   const DRAFT_AUTOSAVE_MS = 2 * 60 * 1000; // 2 minutes
   let draftAutoSaveTimer = null;
@@ -2671,6 +2880,8 @@
   }
 
   function getComposeSnapshot() {
+    if (recipientManagerTo) recipientManagerTo.commitInput();
+    if (recipientManagerCc) recipientManagerCc.commitInput();
     return JSON.stringify({
       to: (elComposeTo?.value || '').trim(),
       cc: (elComposeCc?.value || '').trim(),
@@ -2681,8 +2892,10 @@
   }
 
   function hasUnsentComposeContent() {
-    if ((elComposeTo?.value || '').trim()) return true;
-    if ((elComposeCc?.value || '').trim()) return true;
+    const toInputVal = (document.getElementById('composeToInput')?.value || '').trim();
+    const ccInputVal = (document.getElementById('composeCcInput')?.value || '').trim();
+    if ((elComposeTo?.value || '').trim() || toInputVal) return true;
+    if ((elComposeCc?.value || '').trim() || ccInputVal) return true;
     if ((elComposeSubject?.value || '').trim()) return true;
     if (attachedFiles.length > 0) return true;
     const currentHtml = (elComposeEditor?.innerHTML || '').trim();
@@ -2693,6 +2906,8 @@
   async function saveComposeDraftNow() {
     if (!elComposeModal || elComposeModal.style.display !== 'flex') return;
     if (elBtnSendMail?.disabled || isSavingDraft) return;
+    if (recipientManagerTo) recipientManagerTo.commitInput();
+    if (recipientManagerCc) recipientManagerCc.commitInput();
     if (!hasUnsentComposeContent()) return;
 
     const snapshot = getComposeSnapshot();
@@ -2759,8 +2974,10 @@
 
   function openCompose(options = {}) {
     elComposeModal.style.display = 'flex';
-    elComposeTo.value = options.to || '';
-    elComposeCc.value = options.cc || '';
+    if (recipientManagerTo) recipientManagerTo.setFromText(options.to || '');
+    else if (elComposeTo) elComposeTo.value = options.to || '';
+    if (recipientManagerCc) recipientManagerCc.setFromText(options.cc || '');
+    else if (elComposeCc) elComposeCc.value = options.cc || '';
     elComposeSubject.value = options.subject || '';
 
     const isReplyOrForward = !!options.isReplyOrForward;
@@ -2799,7 +3016,8 @@
     if (options.to) {
       elComposeEditor.focus();
     } else {
-      elComposeTo.focus();
+      if (recipientManagerTo) recipientManagerTo.focus();
+      else if (elComposeTo) elComposeTo.focus();
     }
   }
 
@@ -2816,6 +3034,8 @@
       btnMax.innerHTML = '<i class="fa-regular fa-square"></i>';
     }
     elComposeForm.reset();
+    if (recipientManagerTo) recipientManagerTo.clear();
+    if (recipientManagerCc) recipientManagerCc.clear();
     elComposeEditor.innerHTML = '';
     if (elComposeStatusMsg) elComposeStatusMsg.textContent = '';
     attachedFiles = [];
@@ -2823,6 +3043,30 @@
 
   async function handleSendEmail(e) {
     e.preventDefault();
+    if (recipientManagerTo) recipientManagerTo.commitInput();
+    if (recipientManagerCc) recipientManagerCc.commitInput();
+
+    const toEmails = recipientManagerTo ? recipientManagerTo.getAllEmails() : (elComposeTo?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (toEmails.length === 0) {
+      alert('Por favor, informe pelo menos um destinatário no campo "Para:".');
+      if (recipientManagerTo) recipientManagerTo.focus();
+      return;
+    }
+
+    const invalidTo = recipientManagerTo ? recipientManagerTo.getInvalidEmails() : [];
+    const invalidCc = recipientManagerCc ? recipientManagerCc.getInvalidEmails() : [];
+    const allInvalid = [...invalidTo, ...invalidCc];
+
+    if (allInvalid.length > 0) {
+      const msg = allInvalid.length === 1
+        ? `O endereço "${allInvalid[0]}" não possui um formato de e-mail válido.\nPor favor, corrija ou remova antes de enviar.`
+        : `Os seguintes endereços não possuem formato de e-mail válido:\n• ${allInvalid.join('\n• ')}\n\nPor favor, corrija ou remova antes de enviar.`;
+      alert(msg);
+      if (invalidTo.length > 0 && recipientManagerTo) recipientManagerTo.focus();
+      else if (recipientManagerCc) recipientManagerCc.focus();
+      return;
+    }
+
     stopDraftAutoSaveTimer();
     elBtnSendMail.disabled = true;
     elComposeStatusMsg.textContent = 'Enviando email via SMTP...';
@@ -3055,6 +3299,8 @@
 
   // Event Listeners Setup
   function setupEventListeners() {
+    initRecipientChipManagers();
+
     // New email
     elBtnNewEmail.onclick = () => openCompose();
 

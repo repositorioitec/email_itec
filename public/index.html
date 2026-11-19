@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=3.7.0">
+  <link rel="stylesheet" href="style.css?v=3.8.0">
 </head>
 
 <body>
@@ -477,15 +477,22 @@
       </div>
     </div>
 
-    <form class="compose-form" id="composeForm">
-      <div class="input-row">
+    <form class="compose-form" id="composeForm" novalidate>
+      <div class="input-row recipient-row" id="rowComposeTo">
         <span class="input-label">Para:</span>
-        <input type="email" class="input-field" id="composeTo" list="contactsDatalist" multiple
-          placeholder="Destinatários separados por vírgula" required>
+        <div class="recipient-chips-container" id="containerComposeTo">
+          <input type="text" class="recipient-input" id="composeToInput" list="contactsDatalist"
+            placeholder="Destinatários (Enter, vírgula ou ; para confirmar)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <input type="hidden" id="composeTo" name="to">
       </div>
-      <div class="input-row">
+      <div class="input-row recipient-row" id="rowComposeCc">
         <span class="input-label">Cc:</span>
-        <input type="email" class="input-field" id="composeCc" list="contactsDatalist" multiple placeholder="Com cópia">
+        <div class="recipient-chips-container" id="containerComposeCc">
+          <input type="text" class="recipient-input" id="composeCcInput" list="contactsDatalist"
+            placeholder="Com cópia (Enter, vírgula ou ; para confirmar)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <input type="hidden" id="composeCc" name="cc">
       </div>
       <div class="input-row">
         <span class="input-label">Assunto:</span>
@@ -1111,7 +1118,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="app.js?v=3.8.0"></script>
+  <script src="app.js?v=3.9.0"></script>
 </body>
 
 </html>

@@ -454,7 +454,9 @@ app.post('/api/imap/bulk-flags', async (req, res) => {
 // Save or update message draft in IMAP Drafts (Rascunhos)
 app.post('/api/imap/draft', upload.array('attachments'), async (req, res) => {
   try {
-    const { to = '', cc = '', subject = '', text = '', html = '', previousDraftUid = '' } = req.body;
+    let { to = '', cc = '', subject = '', text = '', html = '', previousDraftUid = '' } = req.body;
+    to = String(to || '').replace(/;/g, ',').trim();
+    cc = String(cc || '').replace(/;/g, ',').trim();
     const attachments = req.files || [];
     const result = await imapService.saveDraftMessage({
       to,
@@ -484,7 +486,10 @@ app.delete('/api/imap/draft/:uid', async (req, res) => {
 // Send message via SMTP
 app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
   try {
-    const { to, cc, bcc, subject, text, html, draftUid } = req.body;
+    let { to = '', cc = '', bcc = '', subject = '', text = '', html = '', draftUid } = req.body;
+    to = String(to || '').replace(/;/g, ',').trim();
+    cc = String(cc || '').replace(/;/g, ',').trim();
+    bcc = String(bcc || '').replace(/;/g, ',').trim();
     const attachments = req.files || [];
 
     const result = await smtpService.sendMail({
