@@ -529,7 +529,10 @@
     }
   }
 
+  const collapsedFolders = new Set();
+
   function getFolderIcon(folder) {
+    if (!folder.isSystem) return 'fa-regular fa-folder';
     const name = (folder.name || folder.path).toLowerCase();
     if (name.includes('entrada') || name.includes('inbox')) return 'fa-solid fa-inbox';
     if (name.includes('enviad') || name.includes('sent')) return 'fa-regular fa-paper-plane';
@@ -540,9 +543,178 @@
     return 'fa-regular fa-folder';
   }
 
+  function getSystemFolderOrder(folder) {
+    if (!folder.isSystem) return 100;
+    const name = (folder.name || '').toLowerCase();
+    if (name.includes('entrada') || folder.path.toUpperCase() === 'INBOX') return 1;
+    if (name.includes('enviad')) return 2;
+    if (name.includes('rascunh')) return 3;
+    if (name.includes('lixo eletr') || name.includes('spam') || name.includes('junk')) return 4;
+    if (name.includes('excluíd') || name.includes('lixeira') || name.includes('trash')) return 5;
+    if (name.includes('arquivo')) return 6;
+    return 50;
+  }
+
+  function buildFolderTree(folderList) {
+    const byPath = new Map();
+    const nodes = folderList.map(f => {
+      const node = { ...f, children: [] };
+      byPath.set(f.path.toLowerCase(), node);
+      return node;
+    });
+
+    const roots = [];
+    nodes.forEach(node => {
+      const pKey = (node.parentPath || '').toLowerCase();
+      if (!node.isSystem && pKey && byPath.has(pKey) && pKey !== node.path.toLowerCase()) {
+        byPath.get(pKey).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    });
+
+    const sortNodes = (arr, isRoot) => {
+      arr.sort((a, b) => {
+        if (isRoot) {
+          const oa = getSystemFolderOrder(a);
+          const ob = getSystemFolderOrder(b);
+          if (oa !== ob) return oa - ob;
+        }
+        return (a.name || a.path).localeCompare(b.name || b.path, 'pt-BR', { sensitivity: 'base' });
+      });
+      arr.forEach(n => sortNodes(n.children, false));
+    };
+    sortNodes(roots, true);
+    return roots;
+  }
+
+  function flattenFolderTree(nodes, depth = 0, out = []) {
+    nodes.forEach(node => {
+      out.push({ folder: node, depth });
+      if (node.children && node.children.length > 0) {
+        flattenFolderTree(node.children, depth + 1, out);
+      }
+    });
+    return out;
+  }
+
+  function openCreateFolderModal(defaultParentPath = '') {
+    const modal = document.getElementById('createFolderModal');
+    const select = document.getElementById('newFolderParentSelect');
+    const input = document.getElementById('newFolderNameInput');
+    if (!modal || !select || !input) return;
+
+    select.innerHTML = '<option value="">Raiz (nível principal)</option>';
+    const flat = flattenFolderTree(buildFolderTree(folders));
+    flat.forEach(({ folder, depth }) => {
+      const opt = document.createElement('option');
+      opt.value = folder.path;
+      const prefix = depth > 0 ? `${'\u00A0\u00A0'.repeat(depth)}↳ ` : '';
+      opt.textContent = `${prefix}${folder.name}`;
+      select.appendChild(opt);
+    });
+
+    if (defaultParentPath) {
+      select.value = defaultParentPath;
+    } else {
+      select.value = '';
+    }
+
+    input.value = '';
+    modal.style.display = 'flex';
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function closeCreateFolderModal() {
+    const modal = document.getElementById('createFolderModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function handleCreateFolderSubmit(e) {
+    e.preventDefault();
+    const select = document.getElementById('newFolderParentSelect');
+    const input = document.getElementById('newFolderNameInput');
+    const btn = document.getElementById('btnSubmitCreateFolder');
+    const name = (input?.value || '').trim();
+    const parentPath = select?.value || '';
+
+    if (!name) {
+      showToast('Informe o nome da subpasta.');
+      input?.focus();
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Criando...</span>';
+    }
+
+    try {
+      const res = await fetch('/api/imap/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, parentPath })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (parentPath) collapsedFolders.delete(parentPath.toLowerCase());
+        if (Array.isArray(data.folders)) {
+          folders = data.folders;
+          renderFolders();
+        } else {
+          await loadFolders();
+        }
+        closeCreateFolderModal();
+        showToast(`Subpasta "${name}" criada com sucesso!`);
+      } else {
+        showToast(data.error || 'Erro ao criar subpasta.');
+      }
+    } catch (err) {
+      showToast('Erro ao criar subpasta: ' + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-folder-plus"></i> <span>Criar Subpasta</span>';
+      }
+    }
+  }
+
+  async function handleDeleteFolder(folder) {
+    if (!folder || folder.isSystem) return;
+    if (!confirm(`Deseja excluir a subpasta "${folder.name}"?\n\nAtenção: as mensagens contidas nela também podem ser removidas no servidor.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/imap/folders', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: folder.path })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (Array.isArray(data.folders)) {
+          folders = data.folders;
+        } else {
+          await loadFolders();
+        }
+        if (currentFolder.toLowerCase() === folder.path.toLowerCase()) {
+          selectFolder('INBOX', 'Caixa de entrada');
+        } else {
+          renderFolders();
+        }
+        showToast(`Subpasta "${folder.name}" excluída.`);
+      } else {
+        showToast(data.error || 'Erro ao excluir subpasta.');
+      }
+    } catch (err) {
+      showToast('Erro ao excluir subpasta: ' + err.message);
+    }
+  }
+
   function renderFolders() {
     elFoldersList.innerHTML = '';
-    
+
     // Update inbox badge
     const inbox = folders.find(f => f.path.toUpperCase() === 'INBOX');
     if (inbox && elBadgeInboxCount) {
@@ -554,24 +726,104 @@
       }
     }
 
-    folders.forEach(folder => {
-      const item = document.createElement('a');
-      item.href = '#';
+    const tree = buildFolderTree(folders);
+
+    const renderNode = (folder, depth) => {
+      const hasChildren = folder.children && folder.children.length > 0;
+      const isCollapsed = collapsedFolders.has(folder.path.toLowerCase());
+
+      const item = document.createElement('div');
       item.className = `folder-item ${folder.path.toLowerCase() === currentFolder.toLowerCase() ? 'active' : ''}`;
       item.setAttribute('data-path', folder.path);
-      item.innerHTML = `
-        <div class="folder-left">
-          <i class="${getFolderIcon(folder)} folder-icon"></i>
-          <span>${folder.name}</span>
-        </div>
-        ${folder.unread > 0 ? `<span class="folder-badge">${folder.unread}</span>` : ''}
-      `;
+      item.style.paddingLeft = `${10 + depth * 16}px`;
+
+      const left = document.createElement('div');
+      left.className = 'folder-left';
+
+      if (hasChildren) {
+        const expandBtn = document.createElement('button');
+        expandBtn.type = 'button';
+        expandBtn.className = 'folder-expand-btn';
+        expandBtn.title = isCollapsed ? 'Expandir subpastas' : 'Recolher subpastas';
+        expandBtn.innerHTML = `<i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}"></i>`;
+        expandBtn.onclick = (e) => {
+          e.stopPropagation();
+          const key = folder.path.toLowerCase();
+          if (collapsedFolders.has(key)) collapsedFolders.delete(key);
+          else collapsedFolders.add(key);
+          renderFolders();
+        };
+        left.appendChild(expandBtn);
+      } else {
+        const spacer = document.createElement('span');
+        spacer.className = 'folder-expand-spacer';
+        left.appendChild(spacer);
+      }
+
+      const icon = document.createElement('i');
+      icon.className = `${getFolderIcon(folder)} folder-icon`;
+      left.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.textContent = folder.name;
+      label.title = folder.name;
+      left.appendChild(label);
+
+      const right = document.createElement('div');
+      right.className = 'folder-right';
+
+      const actions = document.createElement('div');
+      actions.className = 'folder-row-actions';
+
+      const addSubBtn = document.createElement('button');
+      addSubBtn.type = 'button';
+      addSubBtn.className = 'folder-action-btn';
+      addSubBtn.title = `Criar subpasta em ${folder.name}`;
+      addSubBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
+      addSubBtn.onclick = (e) => {
+        e.stopPropagation();
+        openCreateFolderModal(folder.path);
+      };
+      actions.appendChild(addSubBtn);
+
+      if (!folder.isSystem) {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'folder-action-btn delete';
+        delBtn.title = `Excluir subpasta ${folder.name}`;
+        delBtn.innerHTML = '<i class="fa-regular fa-trash-can"></i>';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          handleDeleteFolder(folder);
+        };
+        actions.appendChild(delBtn);
+      }
+
+      right.appendChild(actions);
+
+      if (folder.unread > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'folder-badge';
+        badge.textContent = folder.unread;
+        right.appendChild(badge);
+      }
+
+      item.appendChild(left);
+      item.appendChild(right);
+
       item.onclick = (e) => {
         e.preventDefault();
         selectFolder(folder.path, folder.name);
       };
+
       elFoldersList.appendChild(item);
-    });
+
+      if (hasChildren && !isCollapsed) {
+        folder.children.forEach(child => renderNode(child, depth + 1));
+      }
+    };
+
+    tree.forEach(rootNode => renderNode(rootNode, 0));
 
     // Update Favorites selection
     document.querySelectorAll('#favoritesList .folder-item').forEach(item => {
@@ -3075,6 +3327,9 @@
 
     if (input) {
       input.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.code === 'NumpadEnter')) {
+          return; // Allow Ctrl+Enter to submit/send the email
+        }
         if (e.key === 'Enter' || e.key === ';' || e.key === ',') {
           e.preventDefault();
           const val = input.value.trim();
@@ -4057,6 +4312,28 @@
     elComposeForm.onsubmit = handleSendEmail;
     elBtnCloseCompose.onclick = closeCompose;
 
+    // Folder / Subfolder creation modal listeners
+    const btnCreateRootFolder = document.getElementById('btnCreateRootFolder');
+    const createFolderForm = document.getElementById('createFolderForm');
+    const btnCloseCreateFolderModal = document.getElementById('btnCloseCreateFolderModal');
+    const btnCancelCreateFolderModal = document.getElementById('btnCancelCreateFolderModal');
+    const createFolderModal = document.getElementById('createFolderModal');
+
+    if (btnCreateRootFolder) {
+      btnCreateRootFolder.onclick = (e) => {
+        e.stopPropagation();
+        openCreateFolderModal(currentFolder || 'INBOX');
+      };
+    }
+    if (createFolderForm) createFolderForm.onsubmit = handleCreateFolderSubmit;
+    if (btnCloseCreateFolderModal) btnCloseCreateFolderModal.onclick = closeCreateFolderModal;
+    if (btnCancelCreateFolderModal) btnCancelCreateFolderModal.onclick = closeCreateFolderModal;
+    if (createFolderModal) {
+      createFolderModal.addEventListener('click', (e) => {
+        if (e.target === createFolderModal) closeCreateFolderModal();
+      });
+    }
+
     const btnMaximizeCompose = document.getElementById('btnMaximizeCompose');
     const btnMinimizeCompose = document.getElementById('btnMinimizeCompose');
 
@@ -4295,7 +4572,195 @@
       if (elBtnTestImap) {
         elBtnTestImap.style.display = tabId === 'tabServer' ? 'inline-flex' : 'none';
       }
+      if (tabId === 'tabBackup') {
+        populateBackupFolderSelects();
+      }
     };
+
+    // Backup Tab (Export / Import) Helpers & Listeners
+    let backupSelectedFiles = [];
+
+    function populateBackupFolderSelects() {
+      const exportSel = document.getElementById('backupExportFolder');
+      const importSel = document.getElementById('backupImportTargetFolder');
+      const flat = flattenFolderTree(buildFolderTree(folders));
+
+      if (exportSel) {
+        const prev = exportSel.value || '__ALL__';
+        exportSel.innerHTML = '<option value="__ALL__">Todas as pastas e subpastas</option>';
+        flat.forEach(({ folder, depth }) => {
+          const opt = document.createElement('option');
+          opt.value = folder.path;
+          const prefix = depth > 0 ? `${'\u00A0\u00A0'.repeat(depth)}↳ ` : '';
+          opt.textContent = `${prefix}${folder.name}`;
+          exportSel.appendChild(opt);
+        });
+        exportSel.value = Array.from(exportSel.options).some(o => o.value === prev) ? prev : '__ALL__';
+      }
+
+      if (importSel) {
+        const prev = importSel.value || '__ORIGINAL__';
+        importSel.innerHTML = '<option value="__ORIGINAL__">Manter pastas originais do backup</option>';
+        flat.forEach(({ folder, depth }) => {
+          const opt = document.createElement('option');
+          opt.value = folder.path;
+          const prefix = depth > 0 ? `${'\u00A0\u00A0'.repeat(depth)}↳ ` : '';
+          opt.textContent = `${prefix}${folder.name}`;
+          importSel.appendChild(opt);
+        });
+        importSel.value = Array.from(importSel.options).some(o => o.value === prev) ? prev : '__ORIGINAL__';
+      }
+    }
+
+    function setBackupStatus(type, messageHtml) {
+      const box = document.getElementById('backupStatusBox');
+      if (!box) return;
+      if (!messageHtml) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }
+      box.className = `backup-status-box ${type}`;
+      box.innerHTML = messageHtml;
+      box.style.display = 'flex';
+    }
+
+    function updateBackupFilesLabel(fileList) {
+      backupSelectedFiles = Array.from(fileList || []);
+      const label = document.getElementById('backupSelectedFilesLabel');
+      if (!label) return;
+      if (backupSelectedFiles.length === 0) {
+        label.textContent = 'Clique ou arraste arquivos .json / .eml aqui';
+      } else if (backupSelectedFiles.length === 1) {
+        label.textContent = `${backupSelectedFiles[0].name} (${formatBytes(backupSelectedFiles[0].size)})`;
+      } else {
+        const totalSize = backupSelectedFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+        label.textContent = `${backupSelectedFiles.length} arquivos selecionados (${formatBytes(totalSize)})`;
+      }
+    }
+
+    const backupDropzone = document.getElementById('backupDropzone');
+    const backupImportFileInput = document.getElementById('backupImportFileInput');
+    if (backupDropzone && backupImportFileInput) {
+      backupDropzone.onclick = () => backupImportFileInput.click();
+      backupImportFileInput.onchange = (e) => updateBackupFilesLabel(e.target.files);
+      backupDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        backupDropzone.classList.add('dragover');
+      });
+      backupDropzone.addEventListener('dragleave', () => {
+        backupDropzone.classList.remove('dragover');
+      });
+      backupDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        backupDropzone.classList.remove('dragover');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          updateBackupFilesLabel(e.dataTransfer.files);
+        }
+      });
+    }
+
+    const btnExportBackup = document.getElementById('btnExportBackup');
+    if (btnExportBackup) {
+      btnExportBackup.onclick = async () => {
+        const folderPath = document.getElementById('backupExportFolder')?.value || '__ALL__';
+        const limitPerFolder = Number(document.getElementById('backupExportLimit')?.value || 0);
+
+        btnExportBackup.disabled = true;
+        btnExportBackup.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Exportando backup...</span>';
+        setBackupStatus('info', '<i class="fa-solid fa-spinner fa-spin"></i> <span>Baixando mensagens do servidor IMAP para gerar o arquivo de backup. Aguarde...</span>');
+
+        try {
+          const res = await fetch('/api/backup/export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folderPath, limitPerFolder })
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `Falha HTTP ${res.status}`);
+          }
+
+          const count = Number(res.headers.get('X-Backup-Count') || 0);
+          const filename = res.headers.get('X-Backup-Filename') || `backup-emails-${new Date().toISOString().slice(0, 10)}.json`;
+          const blob = await res.blob();
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+          setBackupStatus('success', `<i class="fa-solid fa-circle-check"></i> <span>Backup concluído! <strong>${count}</strong> e-mail(s) exportado(s) para <strong>${escapeHtml(filename)}</strong> (${formatBytes(blob.size)}).</span>`);
+          showToast(`Backup exportado com ${count} e-mail(s)!`);
+        } catch (err) {
+          setBackupStatus('error', `<i class="fa-solid fa-circle-exclamation"></i> <span>Erro ao exportar backup: ${escapeHtml(err.message)}</span>`);
+          showToast('Erro ao exportar backup.');
+        } finally {
+          btnExportBackup.disabled = false;
+          btnExportBackup.innerHTML = '<i class="fa-solid fa-download"></i> <span>Exportar Backup Agora</span>';
+        }
+      };
+    }
+
+    const btnImportBackup = document.getElementById('btnImportBackup');
+    if (btnImportBackup) {
+      btnImportBackup.onclick = async () => {
+        if (!backupSelectedFiles || backupSelectedFiles.length === 0) {
+          setBackupStatus('error', '<i class="fa-solid fa-circle-exclamation"></i> <span>Selecione primeiro um arquivo de backup (.json) ou arquivos .eml do computador.</span>');
+          return;
+        }
+
+        const targetFolder = document.getElementById('backupImportTargetFolder')?.value || '__ORIGINAL__';
+        const formData = new FormData();
+        formData.append('targetFolder', targetFolder);
+        backupSelectedFiles.forEach(f => formData.append('files', f));
+
+        btnImportBackup.disabled = true;
+        btnImportBackup.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Importando...</span>';
+        setBackupStatus('info', '<i class="fa-solid fa-spinner fa-spin"></i> <span>Importando mensagens para o servidor IMAP. Isso pode levar alguns instantes...</span>');
+
+        try {
+          const res = await fetch('/api/backup/import', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || `Falha HTTP ${res.status}`);
+          }
+
+          if (Array.isArray(data.folders)) {
+            folders = data.folders;
+            renderFolders();
+            populateBackupFolderSelects();
+          } else {
+            await loadFolders();
+          }
+          await loadMessages();
+
+          updateBackupFilesLabel([]);
+          if (backupImportFileInput) backupImportFileInput.value = '';
+
+          const extra = [];
+          if (data.foldersCreated > 0) extra.push(`${data.foldersCreated} pasta(s) criada(s)`);
+          if (data.errors > 0) extra.push(`${data.errors} falha(s)`);
+          const extraStr = extra.length > 0 ? ` (${extra.join(', ')})` : '';
+
+          setBackupStatus('success', `<i class="fa-solid fa-circle-check"></i> <span>Importação concluída! <strong>${data.imported}</strong> e-mail(s) restaurado(s)${extraStr}.</span>`);
+          showToast(`${data.imported} e-mail(s) importado(s) com sucesso!`);
+        } catch (err) {
+          setBackupStatus('error', `<i class="fa-solid fa-circle-exclamation"></i> <span>Erro ao importar backup: ${escapeHtml(err.message)}</span>`);
+          showToast('Erro ao importar backup.');
+        } finally {
+          btnImportBackup.disabled = false;
+          btnImportBackup.innerHTML = '<i class="fa-solid fa-upload"></i> <span>Importar Backup</span>';
+        }
+      };
+    }
 
     document.querySelectorAll('.settings-tab').forEach(tabBtn => {
       tabBtn.onclick = () => {
@@ -4580,8 +5045,21 @@
       };
     }
 
-    // Keyboard Shortcuts (Ctrl+E for search, Ctrl+N for new mail)
+    // Keyboard Shortcuts (Ctrl+E for search, Ctrl+N for new mail, Ctrl+Enter to send)
     window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.code === 'NumpadEnter')) {
+        const isComposeOpen = elComposeModal && elComposeModal.style.display === 'flex';
+        if (isComposeOpen && elComposeForm && !elBtnSendMail?.disabled) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof elComposeForm.requestSubmit === 'function') {
+            elComposeForm.requestSubmit();
+          } else {
+            handleSendEmail(e);
+          }
+          return;
+        }
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
         e.preventDefault();
         elSearchInput.focus();
@@ -4590,7 +5068,7 @@
         e.preventDefault();
         openCompose();
       }
-    });
+    }, true);
   }
 
   // Utilities

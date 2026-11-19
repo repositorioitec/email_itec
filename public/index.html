@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=4.2.0">
+  <link rel="stylesheet" href="style.css?v=4.4.0">
 </head>
 
 <body>
@@ -159,7 +159,12 @@
       <div class="folder-section">
         <div class="folder-section-title">
           <span>Pastas</span>
-          <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
+          <div class="folder-section-actions">
+            <button type="button" class="folder-add-root-btn" id="btnCreateRootFolder" title="Nova pasta ou subpasta" aria-label="Nova pasta ou subpasta">
+              <i class="fa-solid fa-folder-plus"></i>
+            </button>
+            <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
+          </div>
         </div>
         <div id="foldersList">
           <!-- Dynamically populated from IMAP server -->
@@ -602,7 +607,7 @@
 
       <div class="compose-footer">
         <div style="display: flex; gap: 8px;">
-          <button type="submit" class="btn-new-mail" id="btnSendMail">
+          <button type="submit" class="btn-new-mail" id="btnSendMail" title="Enviar e-mail (Ctrl+Enter)">
             <i class="fa-regular fa-paper-plane"></i>
             <span>Enviar</span>
           </button>
@@ -635,6 +640,10 @@
         <button type="button" class="settings-tab" data-tab="tabServer" id="tabBtnServer">
           <i class="fa-solid fa-server"></i>
           <span>Servidor IMAP & SMTP</span>
+        </button>
+        <button type="button" class="settings-tab" data-tab="tabBackup" id="tabBtnBackup">
+          <i class="fa-solid fa-hard-drive"></i>
+          <span>Backup</span>
         </button>
       </div>
 
@@ -934,6 +943,86 @@
           </div>
         </div>
 
+        <!-- TAB 4: Local Email Backup (Export / Import) -->
+        <div class="settings-tab-pane" id="tabBackup">
+          <h4 style="font-size: 14px; color: var(--ms-blue); margin-bottom: 4px;">
+            <i class="fa-solid fa-hard-drive"></i> Backup de E-mails no Computador (Importar e Exportar)
+          </h4>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px;">
+            Salve uma cópia completa dos seus e-mails (com anexos, datas e pastas) diretamente no computador ou restaure arquivos de backup (.json / .eml).
+          </p>
+
+          <div class="backup-grid">
+            <!-- Export Card -->
+            <div class="backup-card">
+              <div class="backup-card-header">
+                <i class="fa-solid fa-file-export" style="color: var(--ms-blue);"></i>
+                <span>Exportar para o Computador</span>
+              </div>
+              <p class="backup-card-desc">
+                Baixa um arquivo <code>.json</code> contendo as mensagens completas (formato RFC822 original com anexos) das pastas escolhidas.
+              </p>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label for="backupExportFolder">Pasta para exportar:</label>
+                <select class="form-control" id="backupExportFolder">
+                  <option value="__ALL__">Todas as pastas e subpastas</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label for="backupExportLimit">Quantidade por pasta:</label>
+                <select class="form-control" id="backupExportLimit">
+                  <option value="0">Todas as mensagens</option>
+                  <option value="50">Últimas 50 por pasta</option>
+                  <option value="100">Últimas 100 por pasta</option>
+                  <option value="250">Últimas 250 por pasta</option>
+                  <option value="500">Últimas 500 por pasta</option>
+                </select>
+              </div>
+
+              <button type="button" class="action-btn primary" id="btnExportBackup" style="width: 100%; justify-content: center;">
+                <i class="fa-solid fa-download"></i>
+                <span>Exportar Backup Agora</span>
+              </button>
+            </div>
+
+            <!-- Import Card -->
+            <div class="backup-card">
+              <div class="backup-card-header">
+                <i class="fa-solid fa-file-import" style="color: #107c41;"></i>
+                <span>Importar do Computador</span>
+              </div>
+              <p class="backup-card-desc">
+                Restaura e-mails de um arquivo de backup <code>.json</code> ou importa um ou mais arquivos <code>.eml</code> diretamente para o servidor.
+              </p>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label for="backupImportTargetFolder">Pasta de destino:</label>
+                <select class="form-control" id="backupImportTargetFolder">
+                  <option value="__ORIGINAL__">Manter pastas originais do backup</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label for="backupImportFileInput">Selecionar arquivo(s) (.json ou .eml):</label>
+                <div class="backup-dropzone" id="backupDropzone">
+                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                  <span id="backupSelectedFilesLabel">Clique ou arraste arquivos .json / .eml aqui</span>
+                  <input type="file" id="backupImportFileInput" accept=".json,.eml,application/json,message/rfc822" multiple style="display: none;">
+                </div>
+              </div>
+
+              <button type="button" class="action-btn primary" id="btnImportBackup" style="width: 100%; justify-content: center; background: #107c41; border-color: #107c41;">
+                <i class="fa-solid fa-upload"></i>
+                <span>Importar Backup</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="backupStatusBox" class="backup-status-box" style="display: none;"></div>
+        </div>
+
       </div>
 
       <div class="modal-footer">
@@ -1216,6 +1305,43 @@
     </div>
   </div>
 
+  <!-- Create Folder / Subfolder Modal -->
+  <div class="modal-overlay" id="createFolderModal" style="display: none; z-index: 2670;">
+    <div class="modal-dialog" style="width: 440px;">
+      <div class="modal-header">
+        <h3 id="createFolderModalTitle"><i class="fa-solid fa-folder-plus"
+            style="color: var(--ms-blue); margin-right: 8px;"></i>Nova pasta / subpasta</h3>
+        <button type="button" class="window-btn" id="btnCloseCreateFolderModal" aria-label="Fechar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form id="createFolderForm">
+        <div class="modal-body" style="padding: 20px;">
+          <div class="form-group">
+            <label for="newFolderParentSelect">Criar dentro da pasta:</label>
+            <select class="form-control" id="newFolderParentSelect">
+              <option value="">Raiz (nível principal)</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="newFolderNameInput">Nome da subpasta:</label>
+            <input type="text" class="form-control" id="newFolderNameInput" placeholder="Ex: Financeiro, Clientes, 2026..." maxlength="80" required>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">
+              A subpasta será criada diretamente no servidor de e-mail (IMAP).
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn" id="btnCancelCreateFolderModal">Cancelar</button>
+          <button type="submit" class="action-btn primary" id="btnSubmitCreateFolder">
+            <i class="fa-solid fa-folder-plus"></i>
+            <span>Criar Subpasta</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div class="toast" id="toastNotification">
     <i class="fa-solid fa-circle-info"></i>
@@ -1223,7 +1349,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="app.js?v=4.2.0"></script>
+  <script src="app.js?v=4.4.0"></script>
 </body>
 
 </html>

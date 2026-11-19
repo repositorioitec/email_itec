@@ -308,19 +308,23 @@ class ImapService {
 
     if (!client) {
       if (this.hasCredentials()) return [];
-      return [
-        { path: 'INBOX', name: 'Caixa de entrada', specialUse: '\\Inbox', unread: 2, total: 5 },
-        { path: 'Sent', name: 'Itens Enviados', specialUse: '\\Sent', unread: 0, total: 1 },
-        { path: 'Drafts', name: 'Rascunhos', specialUse: '\\Drafts', unread: 0, total: 0 },
-        { path: 'Junk', name: 'Lixo Eletrônico', specialUse: '\\Junk', unread: 0, total: 0 },
-        { path: 'Trash', name: 'Itens Excluídos', specialUse: '\\Trash', unread: 0, total: 0 }
-      ];
+      if (!this.mockFolders) {
+        this.mockFolders = [
+          { path: 'INBOX', name: 'Caixa de entrada', originalName: 'INBOX', delimiter: '.', parentPath: '', specialUse: '\\Inbox', isSystem: true, unread: 2, total: 5 },
+          { path: 'Sent', name: 'Itens Enviados', originalName: 'Sent', delimiter: '.', parentPath: '', specialUse: '\\Sent', isSystem: true, unread: 0, total: 1 },
+          { path: 'Drafts', name: 'Rascunhos', originalName: 'Drafts', delimiter: '.', parentPath: '', specialUse: '\\Drafts', isSystem: true, unread: 0, total: 0 },
+          { path: 'Junk', name: 'Lixo Eletrônico', originalName: 'Junk', delimiter: '.', parentPath: '', specialUse: '\\Junk', isSystem: true, unread: 0, total: 0 },
+          { path: 'Trash', name: 'Itens Excluídos', originalName: 'Trash', delimiter: '.', parentPath: '', specialUse: '\\Trash', isSystem: true, unread: 0, total: 0 }
+        ];
+      }
+      return this.mockFolders;
     }
 
     try {
       const list = await client.list();
       const folders = [];
-      const seenByFriendlyName = new Map();
+      const seenSystemByFriendlyName = new Map();
+      const seenPaths = new Set();
 
       for (const item of list) {
         let unread = 0;
@@ -333,37 +337,64 @@ class ImapService {
           // ignore status on special unselectable folders
         }
 
+        const delimiter = item.delimiter || '.';
+        const rawParentPath = item.parentPath || (item.path.includes(delimiter) ? item.path.slice(0, item.path.lastIndexOf(delimiter)) : '');
+        const isRootOrInboxChild = !rawParentPath || rawParentPath.toUpperCase() === 'INBOX';
+
         let friendlyName = item.name;
-        if (item.specialUse === '\\Inbox' || item.name.toUpperCase() === 'INBOX') friendlyName = 'Caixa de entrada';
-        else if (item.specialUse === '\\Sent' || /sent|enviados/i.test(item.name)) friendlyName = 'Itens Enviados';
-        else if (item.specialUse === '\\Drafts' || /drafts|rascunhos/i.test(item.name)) friendlyName = 'Rascunhos';
-        else if (item.specialUse === '\\Junk' || /junk|spam/i.test(item.name)) friendlyName = 'Lixo Eletrônico';
-        else if (item.specialUse === '\\Trash' || /trash|lixeira|excluídos/i.test(item.name)) friendlyName = 'Itens Excluídos';
-        else if (item.specialUse === '\\Archive' || /archive|arquivo/i.test(item.name)) friendlyName = 'Arquivo Morto';
+        let isSystem = false;
+        if (item.specialUse === '\\Inbox' || item.path.toUpperCase() === 'INBOX') {
+          friendlyName = 'Caixa de entrada';
+          isSystem = true;
+        } else if (item.specialUse === '\\Sent' || (isRootOrInboxChild && /^(sent|sent items|sent messages|enviados|itens enviados)$/i.test(item.name))) {
+          friendlyName = 'Itens Enviados';
+          isSystem = true;
+        } else if (item.specialUse === '\\Drafts' || (isRootOrInboxChild && /^(drafts|rascunhos)$/i.test(item.name))) {
+          friendlyName = 'Rascunhos';
+          isSystem = true;
+        } else if (item.specialUse === '\\Junk' || (isRootOrInboxChild && /^(junk|spam|lixo eletr[oô]nico)$/i.test(item.name))) {
+          friendlyName = 'Lixo Eletrônico';
+          isSystem = true;
+        } else if (item.specialUse === '\\Trash' || (isRootOrInboxChild && /^(trash|deleted|deleted items|lixeira|itens exclu[ií]dos)$/i.test(item.name))) {
+          friendlyName = 'Itens Excluídos';
+          isSystem = true;
+        } else if (item.specialUse === '\\Archive' || (isRootOrInboxChild && /^(archive|arquivo morto)$/i.test(item.name))) {
+          friendlyName = 'Arquivo Morto';
+          isSystem = true;
+        }
 
         const folderObj = {
           path: item.path,
           name: friendlyName,
           originalName: item.name,
+          delimiter,
+          parentPath: isSystem ? '' : rawParentPath,
           specialUse: item.specialUse || '',
+          isSystem,
           unread,
           total
         };
 
-        const key = friendlyName.toLowerCase();
-        if (seenByFriendlyName.has(key)) {
-          const existingIdx = seenByFriendlyName.get(key);
-          const existing = folders[existingIdx];
-          const replaceExisting =
-            (folderObj.total > 0 && existing.total === 0) ||
-            (Boolean(folderObj.specialUse) && !existing.specialUse && (folderObj.total > 0 || existing.total === 0));
-          if (replaceExisting) {
-            folders[existingIdx] = folderObj;
+        const pathKey = item.path.toLowerCase();
+        if (seenPaths.has(pathKey)) continue;
+        seenPaths.add(pathKey);
+
+        if (isSystem) {
+          const key = friendlyName.toLowerCase();
+          if (seenSystemByFriendlyName.has(key)) {
+            const existingIdx = seenSystemByFriendlyName.get(key);
+            const existing = folders[existingIdx];
+            const replaceExisting =
+              (folderObj.total > 0 && existing.total === 0) ||
+              (Boolean(folderObj.specialUse) && !existing.specialUse && (folderObj.total > 0 || existing.total === 0));
+            if (replaceExisting) {
+              folders[existingIdx] = folderObj;
+            }
+            continue;
           }
-          continue;
+          seenSystemByFriendlyName.set(key, folders.length);
         }
 
-        seenByFriendlyName.set(key, folders.length);
         folders.push(folderObj);
       }
 
@@ -372,6 +403,123 @@ class ImapService {
       console.warn('[IMAP getFolders Error]:', err.message);
       return [];
     }
+  }
+
+  async createFolder(folderName, parentPath = '') {
+    const cleanName = String(folderName || '').trim();
+    if (!cleanName) {
+      throw new Error('Informe o nome da pasta.');
+    }
+    if (/[\/\\.\*\?%"<>|]/.test(cleanName)) {
+      throw new Error('O nome da pasta não pode conter os caracteres / \\ . * ? % " < > |');
+    }
+
+    let client = null;
+    try {
+      client = await this.getClient();
+    } catch (err) {
+      console.warn('[IMAP createFolder connect error]:', err.message);
+    }
+
+    if (!client) {
+      if (this.hasCredentials()) {
+        throw new Error('Não foi possível conectar ao servidor IMAP.');
+      }
+      await this.getFolders();
+      const delimiter = '.';
+      const newPath = parentPath ? `${parentPath}${delimiter}${cleanName}` : cleanName;
+      if (this.mockFolders.some(f => f.path.toLowerCase() === newPath.toLowerCase())) {
+        throw new Error('Já existe uma pasta com esse nome.');
+      }
+      const created = {
+        path: newPath,
+        name: cleanName,
+        originalName: cleanName,
+        delimiter,
+        parentPath: parentPath || '',
+        specialUse: '',
+        isSystem: false,
+        unread: 0,
+        total: 0
+      };
+      this.mockFolders.push(created);
+      return created;
+    }
+
+    const list = await client.list();
+    let delimiter = '.';
+    if (parentPath) {
+      const parentItem = list.find(i => i.path.toLowerCase() === parentPath.toLowerCase());
+      if (parentItem && parentItem.delimiter) delimiter = parentItem.delimiter;
+    } else {
+      const inboxItem = list.find(i => i.path.toUpperCase() === 'INBOX') || list[0];
+      if (inboxItem && inboxItem.delimiter) delimiter = inboxItem.delimiter;
+    }
+
+    let createdPath = '';
+    if (parentPath) {
+      const candidatePath = `${parentPath}${delimiter}${cleanName}`;
+      const info = await client.mailboxCreate(candidatePath);
+      createdPath = (info && info.path) ? info.path : candidatePath;
+    } else {
+      try {
+        const info = await client.mailboxCreate(cleanName);
+        createdPath = (info && info.path) ? info.path : cleanName;
+      } catch (rootErr) {
+        // Servers using INBOX. personal namespace (e.g. Dovecot / cPanel) require INBOX<delim> prefix
+        const fallbackPath = `INBOX${delimiter}${cleanName}`;
+        const info = await client.mailboxCreate(fallbackPath);
+        createdPath = (info && info.path) ? info.path : fallbackPath;
+      }
+    }
+
+    try {
+      await client.mailboxSubscribe(createdPath);
+    } catch (e) {
+      // Optional subscribe; ignore if unsupported
+    }
+
+    return {
+      path: createdPath,
+      name: cleanName,
+      parentPath: parentPath || (createdPath.includes(delimiter) ? createdPath.slice(0, createdPath.lastIndexOf(delimiter)) : '')
+    };
+  }
+
+  async deleteFolder(folderPath) {
+    const targetPath = String(folderPath || '').trim();
+    if (!targetPath) {
+      throw new Error('Caminho da pasta não informado.');
+    }
+    if (/^(INBOX|Sent|Drafts|Junk|Trash|INBOX\.Sent|INBOX\.Drafts|INBOX\.Junk|INBOX\.Trash)$/i.test(targetPath)) {
+      throw new Error('Pastas padrão do sistema não podem ser excluídas.');
+    }
+
+    let client = null;
+    try {
+      client = await this.getClient();
+    } catch (err) {
+      console.warn('[IMAP deleteFolder connect error]:', err.message);
+    }
+
+    if (!client) {
+      if (this.hasCredentials()) {
+        throw new Error('Não foi possível conectar ao servidor IMAP.');
+      }
+      if (this.mockFolders) {
+        this.mockFolders = this.mockFolders.filter(
+          f => f.path.toLowerCase() !== targetPath.toLowerCase() &&
+               !f.path.toLowerCase().startsWith(targetPath.toLowerCase() + '.')
+        );
+      }
+      return { success: true };
+    }
+
+    try {
+      await client.mailboxUnsubscribe(targetPath);
+    } catch (e) {}
+    await client.mailboxDelete(targetPath);
+    return { success: true };
   }
 
   getMockMessages(folder = 'INBOX', options = {}) {
@@ -928,6 +1076,179 @@ class ImapService {
     }
 
     return Array.from(map.values()).sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'pt-BR'));
+  }
+
+  async exportBackup({ folderPath = '__ALL__', limitPerFolder = 0 } = {}) {
+    let client = null;
+    try {
+      client = await this.getClient();
+    } catch (err) {
+      console.warn('[IMAP exportBackup connect error]:', err.message);
+    }
+
+    const activeAccount = (this.config.imap?.user || 'conta-local').trim();
+
+    if (!client) {
+      if (this.hasCredentials()) {
+        throw new Error('Não foi possível conectar ao servidor IMAP para exportar o backup.');
+      }
+      // Demo fallback
+      const folders = await this.getFolders();
+      const targetFolders = folderPath === '__ALL__'
+        ? folders
+        : folders.filter(f => f.path.toLowerCase() === folderPath.toLowerCase());
+      const exportedMessages = (this.mockMessages || [])
+        .filter(m => folderPath === '__ALL__' || m.folder.toLowerCase() === folderPath.toLowerCase())
+        .map(m => {
+          const raw = `From: ${m.from?.address || 'demo@local'}\r\nTo: ${activeAccount}\r\nSubject: ${m.subject || '(Sem assunto)'}\r\nDate: ${new Date(m.date || Date.now()).toUTCString()}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n${m.html || m.text || ''}`;
+          return {
+            folder: m.folder || 'INBOX',
+            flags: m.seen ? ['\\Seen'] : [],
+            internalDate: m.date || new Date().toISOString(),
+            subject: m.subject || '(Sem assunto)',
+            from: m.from?.address || '',
+            rawBase64: Buffer.from(raw, 'utf8').toString('base64')
+          };
+        });
+      return {
+        format: 'outlook-webmail-backup',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        account: activeAccount,
+        folders: targetFolders.map(f => ({ path: f.path, name: f.name, parentPath: f.parentPath || '', isSystem: !!f.isSystem })),
+        totalMessages: exportedMessages.length,
+        messages: exportedMessages
+      };
+    }
+
+    const allFolders = await this.getFolders();
+    const targetFolders = folderPath === '__ALL__'
+      ? allFolders
+      : allFolders.filter(f => f.path.toLowerCase() === folderPath.toLowerCase());
+
+    const exportedMessages = [];
+    const maxPerFolder = Math.max(0, Number(limitPerFolder) || 0);
+
+    for (const folder of targetFolders) {
+      let lock = null;
+      try {
+        lock = await client.getMailboxLock(folder.path);
+        const total = client.mailbox?.exists || 0;
+        if (total > 0) {
+          const startSeq = maxPerFolder > 0 ? Math.max(1, total - maxPerFolder + 1) : 1;
+          const range = `${startSeq}:*`;
+          for await (const msg of client.fetch(range, { source: true, flags: true, internalDate: true, envelope: true })) {
+            if (!msg.source) continue;
+            const flagsArr = msg.flags ? Array.from(msg.flags).filter(fl => fl !== '\\Recent') : [];
+            const rawBuf = Buffer.isBuffer(msg.source) ? msg.source : Buffer.from(msg.source);
+            exportedMessages.push({
+              folder: folder.path,
+              folderName: folder.name,
+              flags: flagsArr,
+              internalDate: msg.internalDate ? new Date(msg.internalDate).toISOString() : new Date().toISOString(),
+              subject: msg.envelope?.subject || '(Sem assunto)',
+              from: msg.envelope?.from?.[0]?.address || '',
+              rawBase64: rawBuf.toString('base64')
+            });
+          }
+        }
+      } catch (err) {
+        console.warn(`[IMAP Backup Export] Aviso na pasta "${folder.path}":`, err.message);
+      } finally {
+        if (lock) lock.release();
+      }
+    }
+
+    return {
+      format: 'outlook-webmail-backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      account: activeAccount,
+      folders: targetFolders.map(f => ({
+        path: f.path,
+        name: f.name,
+        parentPath: f.parentPath || '',
+        isSystem: !!f.isSystem
+      })),
+      totalMessages: exportedMessages.length,
+      messages: exportedMessages
+    };
+  }
+
+  async importBackup({ messagesToImport = [], targetFolder = '__ORIGINAL__' } = {}) {
+    if (!Array.isArray(messagesToImport) || messagesToImport.length === 0) {
+      throw new Error('Nenhuma mensagem válida encontrada no arquivo selecionado.');
+    }
+
+    let client = null;
+    try {
+      client = await this.getClient();
+    } catch (err) {
+      console.warn('[IMAP importBackup connect error]:', err.message);
+    }
+
+    if (!client) {
+      if (this.hasCredentials()) {
+        throw new Error('Não foi possível conectar ao servidor IMAP para importar o backup.');
+      }
+      return {
+        imported: messagesToImport.length,
+        errors: 0,
+        foldersCreated: 0
+      };
+    }
+
+    const existingList = await client.list();
+    const existingPathMap = new Map(existingList.map(i => [i.path.toLowerCase(), i.path]));
+    let imported = 0;
+    let errors = 0;
+    let foldersCreated = 0;
+
+    for (const item of messagesToImport) {
+      try {
+        const rawBuf = Buffer.isBuffer(item.rawBuffer)
+          ? item.rawBuffer
+          : Buffer.from(item.rawBase64 || '', 'base64');
+        if (!rawBuf || rawBuf.length === 0) {
+          errors++;
+          continue;
+        }
+
+        let destPath = (targetFolder && targetFolder !== '__ORIGINAL__')
+          ? targetFolder
+          : (item.folder || 'INBOX');
+
+        const destKey = destPath.toLowerCase();
+        if (existingPathMap.has(destKey)) {
+          destPath = existingPathMap.get(destKey);
+        } else {
+          // Try creating the missing mailbox on IMAP
+          try {
+            const info = await client.mailboxCreate(destPath);
+            destPath = (info && info.path) ? info.path : destPath;
+            try { await client.mailboxSubscribe(destPath); } catch (e) {}
+            existingPathMap.set(destPath.toLowerCase(), destPath);
+            foldersCreated++;
+          } catch (createErr) {
+            // Fallback to INBOX if folder cannot be created
+            destPath = 'INBOX';
+          }
+        }
+
+        const flags = Array.isArray(item.flags)
+          ? item.flags.filter(f => typeof f === 'string' && f !== '\\Recent')
+          : ['\\Seen'];
+        const internalDate = item.internalDate ? new Date(item.internalDate) : new Date();
+
+        await client.append(destPath, rawBuf, flags, isNaN(internalDate.getTime()) ? new Date() : internalDate);
+        imported++;
+      } catch (err) {
+        console.warn('[IMAP Backup Import] Erro ao importar mensagem:', err.message);
+        errors++;
+      }
+    }
+
+    return { imported, errors, foldersCreated };
   }
 }
 

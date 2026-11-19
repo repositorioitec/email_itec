@@ -18,6 +18,7 @@ const SmtpService = require('./smtp-service');
 const app = express();
 const PORT = process.env.PORT || 4000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 150 * 1024 * 1024 } });
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -349,6 +350,109 @@ app.get('/api/imap/folders', async (req, res) => {
     const folders = await imapService.getFolders();
     res.json({ success: true, folders });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create folder or subfolder
+app.post('/api/imap/folders', async (req, res) => {
+  try {
+    const { name, parentPath = '' } = req.body || {};
+    const folder = await imapService.createFolder(name, parentPath);
+    const folders = await imapService.getFolders();
+    res.json({ success: true, folder, folders });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Delete custom folder or subfolder
+app.delete('/api/imap/folders', async (req, res) => {
+  try {
+    const { path: folderPath } = req.body || {};
+    await imapService.deleteFolder(folderPath);
+    const folders = await imapService.getFolders();
+    res.json({ success: true, folders });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Export emails backup directly to computer (.json bundle with full raw RFC822/.eml messages)
+app.post('/api/backup/export', async (req, res) => {
+  try {
+    const { folderPath = '__ALL__', limitPerFolder = 0 } = req.body || {};
+    const backupData = await imapService.exportBackup({ folderPath, limitPerFolder });
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    const safeScope = folderPath === '__ALL__'
+      ? 'completo'
+      : String(folderPath).replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
+    const filename = `backup-emails-${safeScope}-${stamp}.json`;
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Backup-Filename', filename);
+    res.setHeader('X-Backup-Count', String(backupData.totalMessages || 0));
+    res.send(JSON.stringify(backupData, null, 2));
+  } catch (err) {
+    console.error('[API /api/backup/export] Erro:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Import emails backup from computer (.json backup bundle or .eml files)
+app.post('/api/backup/import', backupUpload.array('files', 200), async (req, res) => {
+  try {
+    const files = req.files || [];
+    const targetFolder = (req.body && req.body.targetFolder) ? String(req.body.targetFolder) : '__ORIGINAL__';
+    if (files.length === 0) {
+      return res.status(400).json({ success: false, error: 'Selecione pelo menos um arquivo de backup (.json ou .eml).' });
+    }
+
+    const messagesToImport = [];
+    for (const f of files) {
+      const lowerName = (f.originalname || '').toLowerCase();
+      if (lowerName.endsWith('.json')) {
+        let parsed;
+        try {
+          parsed = JSON.parse(f.buffer.toString('utf8'));
+        } catch (e) {
+          return res.status(400).json({ success: false, error: `Arquivo JSON inválido: ${f.originalname}` });
+        }
+        if (!parsed || !Array.isArray(parsed.messages)) {
+          return res.status(400).json({ success: false, error: `Formato de backup não reconhecido em ${f.originalname}.` });
+        }
+        for (const m of parsed.messages) {
+          if (m && m.rawBase64) {
+            messagesToImport.push({
+              folder: m.folder || 'INBOX',
+              flags: Array.isArray(m.flags) ? m.flags : ['\\Seen'],
+              internalDate: m.internalDate,
+              rawBase64: m.rawBase64
+            });
+          }
+        }
+      } else if (lowerName.endsWith('.eml')) {
+        messagesToImport.push({
+          folder: targetFolder === '__ORIGINAL__' ? 'INBOX' : targetFolder,
+          flags: ['\\Seen'],
+          internalDate: new Date().toISOString(),
+          rawBuffer: f.buffer
+        });
+      }
+    }
+
+    if (messagesToImport.length === 0) {
+      return res.status(400).json({ success: false, error: 'Nenhuma mensagem válida (.json ou .eml) encontrada nos arquivos enviados.' });
+    }
+
+    const result = await imapService.importBackup({ messagesToImport, targetFolder });
+    const folders = await imapService.getFolders();
+    res.json({ success: true, ...result, folders });
+  } catch (err) {
+    console.error('[API /api/backup/import] Erro:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
