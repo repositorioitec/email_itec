@@ -624,7 +624,7 @@ app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
     });
 
     if (result.success && imapService.hasCredentials()) {
-      imapService.appendSentMessage({ to, cc, subject, text, html }).catch(() => {});
+      await imapService.appendSentMessage({ to, cc, bcc, subject, text, html, attachments }).catch(() => {});
     }
     if (result.success && draftUid) {
       imapService.removeDraftByUid(draftUid).catch(() => {});

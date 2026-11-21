@@ -605,7 +605,11 @@ class ImapService {
           let hasAttachments = false;
           const checkAttachments = (structure) => {
             if (!structure) return;
-            if (structure.disposition === 'attachment' || (structure.parameters && structure.parameters.name)) {
+            if (
+              structure.disposition === 'attachment' ||
+              (structure.parameters && structure.parameters.name) ||
+              (structure.dispositionParameters && structure.dispositionParameters.filename)
+            ) {
               hasAttachments = true;
             }
             if (structure.childNodes) {
@@ -643,7 +647,11 @@ class ImapService {
         const q = search.toLowerCase();
         filtered = filtered.filter(m => 
           (m.subject && m.subject.toLowerCase().includes(q)) ||
-          (m.from && (m.from.name.toLowerCase().includes(q) || m.from.address.toLowerCase().includes(q)))
+          (m.from && (m.from.name.toLowerCase().includes(q) || m.from.address.toLowerCase().includes(q))) ||
+          (Array.isArray(m.to) && m.to.some(t =>
+            (t.name && t.name.toLowerCase().includes(q)) ||
+            (t.address && t.address.toLowerCase().includes(q))
+          ))
         );
       }
 
@@ -1002,27 +1010,45 @@ class ImapService {
     }
   }
 
-  async appendSentMessage({ to, cc, subject, text, html }) {
+  async findSentFolder(client) {
+    try {
+      const list = await client.list();
+      const bySpecialUse = list.find(m => m.specialUse === '\\Sent');
+      if (bySpecialUse) return bySpecialUse.path;
+      const byName = list.find(m => /^(sent|sent items|sent messages|enviados|itens enviados)$/i.test(m.name));
+      if (byName) return byName.path;
+    } catch (e) {}
+    return 'Sent';
+  }
+
+  async appendSentMessage({ to, cc, bcc, subject, text, html, attachments = [] }) {
     const client = await this.getClient();
     if (!client) return;
 
     try {
+      const MailComposer = require('nodemailer/lib/mail-composer');
       const user = this.config.imap?.user || '';
-      const rfc822 = [
-        `From: "Clodoaldo Silva" <${user}>`,
-        `To: ${to}`,
-        cc ? `Cc: ${cc}` : null,
-        `Subject: ${subject || '(Sem assunto)'}`,
-        `Date: ${new Date().toUTCString()}`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/html; charset=utf-8',
-        '',
-        html || text || ''
-      ].filter(line => line !== null).join('\r\n');
+      const sentFolder = await this.findSentFolder(client);
 
-      const sentFolder = 'Sent';
-      await client.append(sentFolder, Buffer.from(rfc822, 'utf8'), ['\\Seen']);
-      console.log(`[IMAP] Email enviado copiado para a pasta "${sentFolder}".`);
+      const mail = new MailComposer({
+        from: user ? `"${this.config.signature?.fullName || 'Clodoaldo Silva'}" <${user}>` : undefined,
+        to: to || undefined,
+        cc: cc || undefined,
+        bcc: bcc || undefined,
+        subject: subject || '(Sem assunto)',
+        text: text || '',
+        html: html || '',
+        date: new Date(),
+        attachments: (attachments || []).map(f => ({
+          filename: f.originalname || f.filename || 'anexo',
+          content: f.buffer || f.content,
+          contentType: f.mimetype || f.contentType || 'application/octet-stream'
+        }))
+      });
+
+      const rawBuffer = await mail.compile().build();
+      await client.append(sentFolder, rawBuffer, ['\\Seen']);
+      console.log(`[IMAP] Email enviado copiado para a pasta "${sentFolder}" com ${(attachments || []).length} anexo(s).`);
     } catch (err) {
       console.warn('[IMAP appendSentMessage]:', err.message);
     }

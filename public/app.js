@@ -3561,7 +3561,7 @@
 
     elComposeEditor.innerHTML = finalBody;
     attachedFiles = [];
-    elComposeAttachedFilesCount.textContent = '';
+    renderComposeAttachments();
     elComposeStatusMsg.textContent = options.draftUid ? 'Editando rascunho salvo' : '';
 
     currentDraftUid = options.draftUid || null;
@@ -3595,6 +3595,58 @@
     elComposeEditor.innerHTML = '';
     if (elComposeStatusMsg) elComposeStatusMsg.textContent = '';
     attachedFiles = [];
+    renderComposeAttachments();
+  }
+
+  function renderComposeAttachments() {
+    const listEl = document.getElementById('composeAttachmentsList');
+    if (elComposeAttachedFilesCount) {
+      elComposeAttachedFilesCount.textContent = attachedFiles.length > 0 ? `${attachedFiles.length} anexo(s)` : '';
+    }
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (attachedFiles.length === 0) {
+      listEl.style.display = 'none';
+      return;
+    }
+    listEl.style.display = 'flex';
+    attachedFiles.forEach((file, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'compose-att-chip';
+      chip.title = `${file.name} (${formatBytes(file.size)})`;
+      chip.innerHTML = `
+        <i class="${getAttachmentIcon(file.name, file.type)}"></i>
+        <span class="compose-att-name">${escapeHtml(file.name)}</span>
+        <span class="compose-att-size">(${formatBytes(file.size)})</span>
+        <button type="button" class="compose-att-remove" title="Remover anexo" aria-label="Remover anexo">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      `;
+      chip.querySelector('.compose-att-remove').onclick = () => {
+        attachedFiles.splice(idx, 1);
+        renderComposeAttachments();
+      };
+      listEl.appendChild(chip);
+    });
+  }
+
+  function addComposeFiles(fileList) {
+    const incoming = Array.from(fileList || []);
+    if (incoming.length === 0) return;
+    let added = 0;
+    incoming.forEach(file => {
+      const exists = attachedFiles.some(
+        f => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified
+      );
+      if (!exists) {
+        attachedFiles.push(file);
+        added++;
+      }
+    });
+    renderComposeAttachments();
+    if (added > 0) {
+      showToast(`${added} arquivo(s) anexado(s)!`);
+    }
   }
 
   async function handleSendEmail(e) {
@@ -4375,9 +4427,70 @@
     };
 
     elComposeFileInput.onchange = (e) => {
-      attachedFiles = Array.from(e.target.files);
-      elComposeAttachedFilesCount.textContent = attachedFiles.length > 0 ? `${attachedFiles.length} anexo(s)` : '';
+      addComposeFiles(e.target.files);
+      e.target.value = '';
     };
+
+    // Drag & Drop files onto Compose Modal to attach
+    (function setupComposeDragDrop() {
+      const overlay = document.getElementById('composeDropOverlay');
+      if (!elComposeModal || !overlay) return;
+
+      let dragDepth = 0;
+      const hasFiles = (e) => {
+        const types = e.dataTransfer && e.dataTransfer.types;
+        return types && Array.from(types).includes('Files');
+      };
+      const showOverlay = () => { overlay.style.display = 'flex'; };
+      const hideOverlay = () => { dragDepth = 0; overlay.style.display = 'none'; };
+
+      elComposeModal.addEventListener('dragenter', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth++;
+        showOverlay();
+      });
+
+      elComposeModal.addEventListener('dragover', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        showOverlay();
+      });
+
+      elComposeModal.addEventListener('dragleave', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth--;
+        if (dragDepth <= 0) hideOverlay();
+      });
+
+      elComposeModal.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        hideOverlay();
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          addComposeFiles(e.dataTransfer.files);
+        }
+      });
+
+      // Prevent browser from opening a file if dropped slightly outside while compose is open
+      window.addEventListener('dragover', (e) => {
+        if (elComposeModal.style.display === 'flex' && hasFiles(e)) {
+          e.preventDefault();
+        }
+      });
+      window.addEventListener('drop', (e) => {
+        if (elComposeModal.style.display === 'flex' && hasFiles(e)) {
+          e.preventDefault();
+          hideOverlay();
+        }
+      });
+    })();
 
     // ── Insert Table Popover ──────────────────────────────────────
     (function setupTableInserter() {

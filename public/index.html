@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=4.4.0">
+  <link rel="stylesheet" href="style.css?v=4.5.0">
 </head>
 
 <body>
@@ -601,8 +601,19 @@
         <span id="composeAttachedFilesCount" style="font-size: 11px; color: var(--ms-blue); margin-left: 6px;"></span>
       </div>
 
+      <!-- Attached Files Bar (populated via Anexar button or Drag & Drop) -->
+      <div class="compose-attachments-bar" id="composeAttachmentsList" style="display: none;"></div>
+
       <!-- Rich Body Content Editable -->
       <div class="compose-editor" id="composeEditor" contenteditable="true" placeholder="Escreva sua mensagem aqui...">
+      </div>
+
+      <!-- Drag & Drop Overlay -->
+      <div class="compose-drop-overlay" id="composeDropOverlay" style="display: none;">
+        <div class="compose-drop-overlay-box">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span>Solte os arquivos aqui para anexar ao e-mail</span>
+        </div>
       </div>
 
       <div class="compose-footer">
@@ -1349,7 +1360,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="app.js?v=4.4.0"></script>
+  <script src="app.js?v=4.5.0"></script>
 </body>
 
 </html>
