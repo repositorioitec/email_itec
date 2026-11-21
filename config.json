@@ -277,6 +277,24 @@
       }
     ]
   },
+  "emailTemplates": [
+    {
+      "id": "tpl_1795282224527",
+      "name": "Cancelamento de matricula",
+      "subject": "Requerimento de cancelamento",
+      "html": "<div><br></div><div><br></div>Aluno(a)<div>Turma:</div><div>Matricula:<br><div><br></div></div>",
+      "updatedBy": "clodoaldo.silva@itecensino.com.br",
+      "updatedAt": "2026-11-21T17:32:55.845Z"
+    },
+    {
+      "id": "tpl_1795282257847",
+      "name": "Renovação de matricula fora do prazo",
+      "subject": "Renovação fora do prazo",
+      "html": "<br><div><br></div><div><div>Turma:</div><div>Matricula:</div><div>Aluno(a):</div><div>Email:</div><div>Disciplinas:</div></div>",
+      "updatedBy": "clodoaldo.silva@itecensino.com.br",
+      "updatedAt": "2026-11-21T17:32:34.423Z"
+    }
+  ],
   "layout": {
     "readingPane": "bottom"
   },

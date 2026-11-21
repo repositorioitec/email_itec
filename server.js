@@ -88,6 +88,7 @@ let appConfig = {
   deletedContactsByUser: {},
   calendarByUser: {},
   todosByUser: {},
+  emailTemplates: [],
   layout: { readingPane: 'right' },
   demoModeIfDisconnected: true
 };
@@ -111,7 +112,8 @@ let appConfig = {
         contactsByUser: { ...(appConfig.contactsByUser || {}), ...(parsed.contactsByUser || {}) },
         deletedContactsByUser: { ...(appConfig.deletedContactsByUser || {}), ...(parsed.deletedContactsByUser || {}) },
         calendarByUser: { ...(appConfig.calendarByUser || {}), ...(parsed.calendarByUser || {}) },
-        todosByUser: { ...(appConfig.todosByUser || {}), ...(parsed.todosByUser || {}) }
+        todosByUser: { ...(appConfig.todosByUser || {}), ...(parsed.todosByUser || {}) },
+        emailTemplates: Array.isArray(parsed.emailTemplates) ? parsed.emailTemplates : (appConfig.emailTemplates || [])
       };
     } catch (e) {
       console.error(`Erro ao carregar ${file}:`, e.message);
@@ -631,6 +633,80 @@ app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
     }
 
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================
+// Shared / Personal Email Templates Endpoints
+// ========================
+function getVisibleEmailTemplates(userKey) {
+  const all = Array.isArray(appConfig.emailTemplates) ? appConfig.emailTemplates : [];
+  return all.filter(t => t.shared !== false || (t.owner || '').toLowerCase() === userKey);
+}
+
+app.get('/api/email-templates', (req, res) => {
+  const userKey = getActiveUserKey();
+  res.json({ success: true, templates: getVisibleEmailTemplates(userKey) });
+});
+
+app.post('/api/email-templates', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const id = (req.body.id || `tpl_${Date.now()}`).trim();
+    const name = String(req.body.name || '').trim();
+    const subject = String(req.body.subject || '').trim();
+    const html = String(req.body.html || '').trim();
+    const shared = req.body.shared !== false;
+
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Informe o nome do modelo de e-mail.' });
+    }
+    if (!html) {
+      return res.status(400).json({ success: false, error: 'Informe o conteúdo do modelo de e-mail.' });
+    }
+
+    appConfig.emailTemplates = Array.isArray(appConfig.emailTemplates) ? appConfig.emailTemplates : [];
+    const idx = appConfig.emailTemplates.findIndex(t => t.id === id);
+    const existing = idx >= 0 ? appConfig.emailTemplates[idx] : null;
+
+    const templateObj = {
+      id,
+      name,
+      subject,
+      html,
+      shared,
+      owner: existing?.owner || userKey,
+      updatedBy: userKey,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (idx >= 0) {
+      appConfig.emailTemplates[idx] = templateObj;
+    } else {
+      appConfig.emailTemplates.push(templateObj);
+    }
+
+    appConfig.emailTemplates.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
+    saveConfigSafe(appConfig);
+    res.json({ success: true, template: templateObj, templates: getVisibleEmailTemplates(userKey) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/email-templates/:id', (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const id = req.params.id;
+    appConfig.emailTemplates = (appConfig.emailTemplates || []).filter(t => {
+      if (t.id !== id) return true;
+      const canDelete = t.shared !== false || (t.owner || '').toLowerCase() === userKey;
+      return !canDelete;
+    });
+    saveConfigSafe(appConfig);
+    res.json({ success: true, templates: getVisibleEmailTemplates(userKey) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

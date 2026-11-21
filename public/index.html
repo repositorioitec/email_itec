@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=4.5.0">
+  <link rel="stylesheet" href="style.css?v=4.6.1">
 </head>
 
 <body>
@@ -594,6 +594,12 @@
         </div>
 
         <div class="ribbon-divider" style="height: 18px;"></div>
+        <select id="composeTemplateSelect" class="compose-select compose-template-select"
+          title="Escolher modelo de e-mail padrão compartilhado (opcional)">
+          <option value="">Modelo padrão...</option>
+        </select>
+
+        <div class="ribbon-divider" style="height: 18px;"></div>
         <label class="format-btn" style="cursor: pointer;" title="Anexar arquivos">
           <i class="fa-solid fa-paperclip"></i> Anexar
           <input type="file" id="composeFileInput" multiple style="display: none;">
@@ -640,7 +646,11 @@
 
       <!-- Settings Navigation Tabs -->
       <div class="settings-tabs">
-        <button type="button" class="settings-tab active" data-tab="tabLayout" id="tabBtnLayout">
+        <button type="button" class="settings-tab active" data-tab="tabTemplates" id="tabBtnTemplates">
+          <i class="fa-regular fa-file-lines"></i>
+          <span>Modelos de E-mail</span>
+        </button>
+        <button type="button" class="settings-tab" data-tab="tabLayout" id="tabBtnLayout">
           <i class="fa-solid fa-table-columns"></i>
           <span>Layout</span>
         </button>
@@ -659,6 +669,72 @@
       </div>
 
       <div class="modal-body">
+
+        <!-- TAB 0: Shared Email Templates (1st position) -->
+        <div class="settings-tab-pane active" id="tabTemplates">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
+            <div>
+              <h4 style="font-size: 14px; color: var(--ms-blue); margin-bottom: 2px;">
+                <i class="fa-regular fa-file-lines"></i> Modelos de E-mail Padrão
+              </h4>
+              <p style="font-size: 12px; color: var(--text-secondary);">
+                Crie modelos padrão privados ou compartilhados com todos os usuários para usar na barra de <strong>Nova mensagem</strong>.
+              </p>
+            </div>
+            <button type="button" class="action-btn primary" id="btnNewEmailTemplate">
+              <i class="fa-solid fa-plus"></i>
+              <span>Novo Modelo</span>
+            </button>
+          </div>
+
+          <div class="templates-studio-grid">
+            <div class="templates-list-col">
+              <div class="templates-col-title">Modelos salvos</div>
+              <div id="sharedTemplatesList" class="shared-templates-list">
+                <div class="templates-empty-state">Nenhum modelo criado ainda.</div>
+              </div>
+            </div>
+
+            <div class="template-editor-col">
+              <input type="hidden" id="tplEditId" value="">
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label for="tplNameInput">Nome do modelo:</label>
+                <input type="text" class="form-control" id="tplNameInput" placeholder="Ex: Confirmação de Matrícula, Cobrança..." maxlength="80">
+              </div>
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label for="tplSubjectInput">Assunto padrão (opcional):</label>
+                <input type="text" class="form-control" id="tplSubjectInput" placeholder="Ex: Confirmação de Matrícula - ITEC Ensino" maxlength="160">
+              </div>
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label>Conteúdo do modelo:</label>
+                <div class="template-mini-toolbar">
+                  <button type="button" class="format-btn" data-tpl-cmd="bold" title="Negrito"><b>N</b></button>
+                  <button type="button" class="format-btn" data-tpl-cmd="italic" title="Itálico"><i>I</i></button>
+                  <button type="button" class="format-btn" data-tpl-cmd="underline" title="Sublinhado"><u>S</u></button>
+                  <button type="button" class="format-btn" data-tpl-cmd="insertUnorderedList" title="Lista com marcadores"><i class="fa-solid fa-list-ul"></i></button>
+                  <button type="button" class="format-btn" data-tpl-cmd="insertOrderedList" title="Lista numerada"><i class="fa-solid fa-list-ol"></i></button>
+                </div>
+                <div class="template-body-editor" id="tplBodyEditor" contenteditable="true" placeholder="Digite o texto padrão do e-mail aqui..."></div>
+              </div>
+              <div class="form-group" style="margin-bottom: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500; color: var(--text-primary); font-size: 12.5px;">
+                  <input type="checkbox" id="tplSharedCheckbox" checked>
+                  <span>Compartilhar este modelo com todos os usuários</span>
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <button type="button" class="action-btn" id="btnDeleteEmailTemplate" style="display: none; color: #a80000;">
+                  <i class="fa-regular fa-trash-can"></i>
+                  <span>Excluir Modelo</span>
+                </button>
+                <button type="button" class="action-btn primary" id="btnSaveEmailTemplate" style="margin-left: auto;">
+                  <i class="fa-solid fa-floppy-disk"></i>
+                  <span>Salvar Modelo</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- TAB 1: IMAP & SMTP Server Settings -->
         <div class="settings-tab-pane" id="tabServer">
@@ -913,7 +989,7 @@
         </div>
 
         <!-- TAB 3: Layout / Reading Pane Position -->
-        <div class="settings-tab-pane active" id="tabLayout">
+        <div class="settings-tab-pane" id="tabLayout">
           <h4 style="font-size: 14px; color: var(--ms-blue); margin-bottom: 4px;">
             <i class="fa-solid fa-table-columns"></i> Posição do Painel de Leitura
           </h4>
@@ -1360,7 +1436,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="app.js?v=4.5.0"></script>
+  <script src="app.js?v=4.6.1"></script>
 </body>
 
 </html>

@@ -82,6 +82,8 @@
   let selectedUids = new Set();
   let folders = [];
   let attachedFiles = [];
+  let emailTemplates = [];
+  let editingTemplateId = null;
 
   // Signature State
   let sigState = {
@@ -250,6 +252,7 @@
       loadContacts();
       loadCalendarEvents();
       loadTodos();
+      loadEmailTemplates();
       startAutoSync();
     } else if (isSessionAuth && serverRestarted) {
       endUserSession('O computador/servidor foi reiniciado. Faça login novamente.');
@@ -454,6 +457,7 @@
         loadContacts();
         loadCalendarEvents();
         loadTodos();
+        loadEmailTemplates();
         startAutoSync();
       } else {
         if (elLoginErrorBox) {
@@ -3562,6 +3566,9 @@
     elComposeEditor.innerHTML = finalBody;
     attachedFiles = [];
     renderComposeAttachments();
+    populateComposeTemplateSelect();
+    const tplSel = document.getElementById('composeTemplateSelect');
+    if (tplSel) tplSel.value = '';
     elComposeStatusMsg.textContent = options.draftUid ? 'Editando rascunho salvo' : '';
 
     currentDraftUid = options.draftUid || null;
@@ -3647,6 +3654,113 @@
     if (added > 0) {
       showToast(`${added} arquivo(s) anexado(s)!`);
     }
+  }
+
+  // Shared Email Templates (Global across all users)
+  async function loadEmailTemplates() {
+    try {
+      const res = await fetch('/api/email-templates');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.templates)) {
+        emailTemplates = data.templates;
+        populateComposeTemplateSelect();
+        renderSharedTemplatesList();
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar modelos de e-mail:', e);
+    }
+  }
+
+  function populateComposeTemplateSelect() {
+    const sel = document.getElementById('composeTemplateSelect');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Modelo padrão...</option>';
+    emailTemplates.forEach(tpl => {
+      const opt = document.createElement('option');
+      opt.value = tpl.id;
+      opt.textContent = tpl.shared === false ? `${tpl.name} (Privado)` : tpl.name;
+      sel.appendChild(opt);
+    });
+  }
+
+  function resetEmailTemplateForm() {
+    editingTemplateId = null;
+    const idEl = document.getElementById('tplEditId');
+    const nameEl = document.getElementById('tplNameInput');
+    const subjEl = document.getElementById('tplSubjectInput');
+    const bodyEl = document.getElementById('tplBodyEditor');
+    const sharedEl = document.getElementById('tplSharedCheckbox');
+    const delBtn = document.getElementById('btnDeleteEmailTemplate');
+    if (idEl) idEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (subjEl) subjEl.value = '';
+    if (bodyEl) bodyEl.innerHTML = '';
+    if (sharedEl) sharedEl.checked = true;
+    if (delBtn) delBtn.style.display = 'none';
+    renderSharedTemplatesList();
+    nameEl?.focus();
+  }
+
+  function loadTemplateIntoEditor(tpl) {
+    if (!tpl) return;
+    editingTemplateId = tpl.id;
+    const idEl = document.getElementById('tplEditId');
+    const nameEl = document.getElementById('tplNameInput');
+    const subjEl = document.getElementById('tplSubjectInput');
+    const bodyEl = document.getElementById('tplBodyEditor');
+    const sharedEl = document.getElementById('tplSharedCheckbox');
+    const delBtn = document.getElementById('btnDeleteEmailTemplate');
+    if (idEl) idEl.value = tpl.id;
+    if (nameEl) nameEl.value = tpl.name || '';
+    if (subjEl) subjEl.value = tpl.subject || '';
+    if (bodyEl) bodyEl.innerHTML = tpl.html || '';
+    if (sharedEl) sharedEl.checked = tpl.shared !== false;
+    if (delBtn) delBtn.style.display = 'inline-flex';
+    renderSharedTemplatesList();
+  }
+
+  function renderSharedTemplatesList() {
+    const listEl = document.getElementById('sharedTemplatesList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (!emailTemplates || emailTemplates.length === 0) {
+      listEl.innerHTML = '<div class="templates-empty-state">Nenhum modelo criado ainda.<br>Crie o primeiro ao lado.</div>';
+      return;
+    }
+    emailTemplates.forEach(tpl => {
+      const isShared = tpl.shared !== false;
+      const card = document.createElement('div');
+      card.className = `template-item-card ${editingTemplateId === tpl.id ? 'active' : ''}`;
+      card.innerHTML = `
+        <div class="template-item-name" title="${escapeHtml(tpl.name)}">${escapeHtml(tpl.name)}</div>
+        <div class="template-item-sub">${tpl.subject ? escapeHtml(tpl.subject) : 'Sem assunto padrão'}</div>
+        <div class="template-scope-badge ${isShared ? 'shared' : 'private'}">
+          <i class="fa-solid ${isShared ? 'fa-users' : 'fa-lock'}"></i>
+          <span>${isShared ? 'Compartilhado' : 'Somente eu'}</span>
+        </div>
+      `;
+      card.onclick = () => loadTemplateIntoEditor(tpl);
+      listEl.appendChild(card);
+    });
+  }
+
+  function applyEmailTemplateToCompose(templateId) {
+    if (!templateId) return;
+    const tpl = emailTemplates.find(t => t.id === templateId);
+    if (!tpl) return;
+
+    if (tpl.subject && elComposeSubject && !elComposeSubject.value.trim()) {
+      elComposeSubject.value = tpl.subject;
+    }
+
+    if (elComposeEditor) {
+      const sigEl = elComposeEditor.querySelector('[data-outlook-signature="true"]');
+      const sigHtml = sigEl ? sigEl.outerHTML : '';
+      elComposeEditor.innerHTML = `${tpl.html || ''}${sigHtml ? '<p><br></p>' + sigHtml : ''}`;
+      elComposeEditor.focus();
+    }
+
+    showToast(`Modelo "${tpl.name}" aplicado!`);
   }
 
   async function handleSendEmail(e) {
@@ -4688,7 +4802,106 @@
       if (tabId === 'tabBackup') {
         populateBackupFolderSelects();
       }
+      if (tabId === 'tabTemplates') {
+        loadEmailTemplates();
+      }
     };
+
+    // Compose Optional Template Selector
+    const composeTemplateSelect = document.getElementById('composeTemplateSelect');
+    if (composeTemplateSelect) {
+      composeTemplateSelect.onchange = (e) => {
+        const val = e.target.value;
+        if (val) {
+          applyEmailTemplateToCompose(val);
+        }
+      };
+    }
+
+    // Shared Email Templates Tab Listeners
+    const btnNewEmailTemplate = document.getElementById('btnNewEmailTemplate');
+    const btnSaveEmailTemplate = document.getElementById('btnSaveEmailTemplate');
+    const btnDeleteEmailTemplate = document.getElementById('btnDeleteEmailTemplate');
+    const tplBodyEditor = document.getElementById('tplBodyEditor');
+
+    document.querySelectorAll('[data-tpl-cmd]').forEach(btn => {
+      btn.onclick = () => {
+        if (tplBodyEditor) tplBodyEditor.focus();
+        document.execCommand(btn.getAttribute('data-tpl-cmd'), false, null);
+      };
+    });
+
+    if (btnNewEmailTemplate) {
+      btnNewEmailTemplate.onclick = () => resetEmailTemplateForm();
+    }
+
+    if (btnSaveEmailTemplate) {
+      btnSaveEmailTemplate.onclick = async () => {
+        const id = (document.getElementById('tplEditId')?.value || '').trim();
+        const name = (document.getElementById('tplNameInput')?.value || '').trim();
+        const subject = (document.getElementById('tplSubjectInput')?.value || '').trim();
+        const html = (tplBodyEditor?.innerHTML || '').trim();
+        const shared = document.getElementById('tplSharedCheckbox')?.checked !== false;
+
+        if (!name) {
+          showToast('Informe o nome do modelo.');
+          document.getElementById('tplNameInput')?.focus();
+          return;
+        }
+        if (!html || !(tplBodyEditor?.innerText || '').trim()) {
+          showToast('Digite o conteúdo do modelo de e-mail.');
+          tplBodyEditor?.focus();
+          return;
+        }
+
+        btnSaveEmailTemplate.disabled = true;
+        try {
+          const res = await fetch('/api/email-templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id || undefined, name, subject, html, shared })
+          });
+          const data = await res.json();
+          if (data.success) {
+            emailTemplates = data.templates || [];
+            editingTemplateId = data.template?.id || null;
+            if (data.template) loadTemplateIntoEditor(data.template);
+            populateComposeTemplateSelect();
+            showToast(shared ? `Modelo "${name}" salvo e compartilhado com todos!` : `Modelo privado "${name}" salvo!`);
+          } else {
+            showToast(data.error || 'Erro ao salvar modelo.');
+          }
+        } catch (err) {
+          showToast('Erro ao salvar modelo: ' + err.message);
+        } finally {
+          btnSaveEmailTemplate.disabled = false;
+        }
+      };
+    }
+
+    if (btnDeleteEmailTemplate) {
+      btnDeleteEmailTemplate.onclick = async () => {
+        const id = (document.getElementById('tplEditId')?.value || '').trim();
+        if (!id) return;
+        const tpl = emailTemplates.find(t => t.id === id);
+        if (!confirm(`Deseja excluir o modelo compartilhado "${tpl?.name || ''}" para todos os usuários?`)) return;
+
+        try {
+          const res = await fetch(`/api/email-templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            emailTemplates = data.templates || [];
+            populateComposeTemplateSelect();
+            resetEmailTemplateForm();
+            showToast('Modelo excluído com sucesso.');
+          } else {
+            showToast(data.error || 'Erro ao excluir modelo.');
+          }
+        } catch (err) {
+          showToast('Erro ao excluir modelo: ' + err.message);
+        }
+      };
+    }
 
     // Backup Tab (Export / Import) Helpers & Listeners
     let backupSelectedFiles = [];
@@ -5025,7 +5238,7 @@
       populateSignatureBuilderUI();
       elTestResultBox.style.display = 'none';
       elSettingsModal.style.display = 'flex';
-      switchSettingsTab('tabLayout');
+      switchSettingsTab('tabTemplates');
     };
     if (elBtnOpenSettings) elBtnOpenSettings.onclick = openSettings;
     if (elRailSettingsBtn) elRailSettingsBtn.onclick = openSettings;
