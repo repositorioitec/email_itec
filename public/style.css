@@ -807,9 +807,10 @@ body.is-resizing iframe {
 }
 
 .col-hdr-status {
-  width: 44px;
+  width: 68px;
   flex-shrink: 0;
-  text-align: center;
+  text-align: left;
+  padding-left: 4px;
 }
 
 .col-hdr-sender {
@@ -854,9 +855,10 @@ body.is-resizing iframe {
 }
 
 .col-hdr-status {
-  width: 44px;
+  width: 68px;
   flex-shrink: 0;
-  text-align: center;
+  text-align: left;
+  padding-left: 4px;
 }
 
 .col-hdr-sender {
@@ -932,12 +934,13 @@ body.is-resizing iframe {
 }
 
 .content-split.layout-bottom .message-row-status {
-  width: 44px;
+  width: 68px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  justify-content: flex-start;
+  padding-left: 2px;
+  gap: 5px;
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -1008,12 +1011,13 @@ body.is-resizing iframe {
 }
 
 .content-split.layout-bottom .message-row-status {
-  width: 44px;
+  width: 68px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
+  justify-content: flex-start;
+  padding-left: 2px;
+  gap: 5px;
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -4750,6 +4754,83 @@ body.dark-mode .template-body-editor {
   .templates-studio-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Message Thumbs-Up / Like (Read Confirmation Reaction) */
+.btn-like-mail {
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.btn-like-mail:hover {
+  border-color: var(--ms-blue);
+  color: var(--ms-blue);
+}
+
+.btn-like-mail.liked {
+  background: var(--ms-blue-light);
+  border-color: var(--ms-blue);
+  color: var(--ms-blue);
+  font-weight: 600;
+}
+
+.btn-like-mail.liked i {
+  color: var(--ms-blue);
+}
+
+.card-action-btn.liked {
+  color: var(--ms-blue) !important;
+}
+
+.msg-like-indicator {
+  color: var(--ms-blue);
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.row-like-btn {
+  background: transparent;
+  border: none;
+  padding: 2px 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s, transform 0.12s;
+}
+
+.row-like-btn:hover {
+  color: var(--ms-blue);
+  background: rgba(0, 120, 212, 0.12);
+  transform: scale(1.12);
+}
+
+.row-like-btn.liked {
+  color: var(--ms-blue);
+}
+
+body.dark-mode .row-like-btn {
+  color: #8a8886;
+}
+
+body.dark-mode .row-like-btn:hover,
+body.dark-mode .row-like-btn.liked {
+  color: #6cb4f5;
+}
+
+body.dark-mode .btn-like-mail.liked {
+  background: rgba(0, 120, 212, 0.22);
+  border-color: #6cb4f5;
+  color: #6cb4f5;
+}
+
+body.dark-mode .btn-like-mail.liked i,
+body.dark-mode .card-action-btn.liked,
+body.dark-mode .msg-like-indicator {
+  color: #6cb4f5 !important;
 }
 
 

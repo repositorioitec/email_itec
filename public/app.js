@@ -84,6 +84,7 @@
   let attachedFiles = [];
   let emailTemplates = [];
   let editingTemplateId = null;
+  let messageLikesMap = {};
 
   // Signature State
   let sigState = {
@@ -253,6 +254,7 @@
       loadCalendarEvents();
       loadTodos();
       loadEmailTemplates();
+      loadMessageLikes();
       startAutoSync();
     } else if (isSessionAuth && serverRestarted) {
       endUserSession('O computador/servidor foi reiniciado. Faça login novamente.');
@@ -458,6 +460,7 @@
         loadCalendarEvents();
         loadTodos();
         loadEmailTemplates();
+        loadMessageLikes();
         startAutoSync();
       } else {
         if (elLoginErrorBox) {
@@ -994,6 +997,115 @@
     updateRibbonState();
   }
 
+  function getLikeKeyForMessage(msg) {
+    if (!msg) return '';
+    const fromAddr = String(msg.from?.address || '').trim().toLowerCase();
+    const cleanSubject = String(msg.subject || '(sem assunto)')
+      .replace(/^(re|fwd|enc|res)\s*:\s*/i, '')
+      .trim()
+      .toLowerCase();
+    return `${fromAddr}||${cleanSubject}`;
+  }
+
+  function getLikesForMessage(msg) {
+    const key = getLikeKeyForMessage(msg);
+    return (key && Array.isArray(messageLikesMap[key])) ? messageLikesMap[key] : [];
+  }
+
+  function isLikedByCurrentUser(msg) {
+    const me = (SESSION_STORE.getUser() || '').trim().toLowerCase();
+    if (!me) return false;
+    return getLikesForMessage(msg).some(item => (item.user || '').toLowerCase() === me);
+  }
+
+  function formatLikesTooltip(likes) {
+    if (!likes || likes.length === 0) return 'Curtir com joinha (confirmar leitura)';
+    const parts = likes.map(l => {
+      const who = l.userName || l.user || 'Usuário';
+      const when = l.likedAt ? new Date(l.likedAt).toLocaleString('pt-BR') : '';
+      return when ? `${who} em ${when}` : who;
+    });
+    return `👍 Leitura confirmada por: ${parts.join(', ')}`;
+  }
+
+  async function loadMessageLikes() {
+    try {
+      const res = await fetch('/api/messages/likes');
+      const data = await res.json();
+      if (data.success && data.likes) {
+        messageLikesMap = data.likes;
+        if (messages.length > 0) renderMessageList();
+        if (selectedMessage) updateLikeButtonUI(selectedMessage);
+      }
+    } catch (e) {}
+  }
+
+  function updateLikeButtonUI(msg) {
+    const btn = document.getElementById('btnLikeMessage');
+    if (!btn) return;
+    if (!msg) {
+      btn.classList.remove('liked');
+      btn.innerHTML = '<i class="fa-regular fa-thumbs-up"></i><span>Curtir</span>';
+      return;
+    }
+    const likes = getLikesForMessage(msg);
+    const likedByMe = isLikedByCurrentUser(msg);
+    btn.classList.toggle('liked', likedByMe || likes.length > 0);
+    btn.title = likes.length > 0
+      ? formatLikesTooltip(likes)
+      : 'Curtir com joinha (envia confirmação de leitura ao remetente)';
+    const countSuffix = likes.length > 1 ? ` (${likes.length})` : '';
+    btn.innerHTML = `<i class="fa-${(likedByMe || likes.length > 0) ? 'solid' : 'regular'} fa-thumbs-up"></i><span>${likedByMe ? 'Curtido' : 'Curtir'}${countSuffix}</span>`;
+    btn.onclick = () => toggleLikeEmail(msg);
+  }
+
+  async function toggleLikeEmail(msg) {
+    if (!msg) return;
+    const btn = document.getElementById('btnLikeMessage');
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch('/api/messages/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromEmail: msg.from?.address || '',
+          fromName: msg.from?.name || '',
+          subject: msg.subject || '',
+          uid: msg.uid,
+          folder: msg.folder || currentFolder || 'INBOX'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.likes) messageLikesMap = data.likes;
+        if (data.liked && !msg.seen) {
+          msg.seen = true;
+          const target = messages.find(m => String(m.uid) === String(msg.uid));
+          if (target) target.seen = true;
+        }
+        renderMessageList();
+        if (selectedMessage && String(selectedMessage.uid) === String(msg.uid)) {
+          updateLikeButtonUI(selectedMessage);
+        }
+        if (data.liked) {
+          showToast(
+            data.notifiedSender
+              ? '👍 Joinha enviado! O remetente recebeu a confirmação de leitura.'
+              : '👍 E-mail curtido como lido!'
+          );
+        } else {
+          showToast('Curtida removida.');
+        }
+      } else {
+        showToast(data.error || 'Erro ao registrar curtida.');
+      }
+    } catch (err) {
+      showToast('Erro ao enviar joinha: ' + err.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   function renderMessageList() {
     if (messages.length === 0) {
       elMessageListScroll.innerHTML = `
@@ -1030,7 +1142,7 @@
 
       // Direct click handler on the card
       card.onclick = (e) => {
-        if (e.target.closest('.card-action-btn') || e.target.closest('.msg-select-chk')) return;
+        if (e.target.closest('.card-action-btn') || e.target.closest('.msg-select-chk') || e.target.closest('.row-like-btn')) return;
         selectMessage(msg);
       };
       
@@ -1052,6 +1164,16 @@
       const subjectStr = msg.subject || '(Sem assunto)';
       const snippetStr = (msg.snippet && msg.snippet.trim() !== subjectStr.trim()) ? msg.snippet : '';
 
+      const msgLikes = getLikesForMessage(msg);
+      const isLiked = msgLikes.length > 0;
+      const likeTooltip = formatLikesTooltip(msgLikes);
+
+      const likeBtnHtml = `
+        <button type="button" class="row-like-btn ${isLiked ? 'liked' : ''}" onclick="window.quickAction(event, '${msg.uid}', 'like')" title="${escapeHtml(likeTooltip)}" aria-label="Curtir com joinha">
+          <i class="fa-${isLiked ? 'solid' : 'regular'} fa-thumbs-up"></i>
+        </button>
+      `;
+
       const actionsHtml = `
         <button type="button" class="card-action-btn btn-quick-delete" onclick="window.quickAction(event, '${msg.uid}', 'delete')" title="Excluir"><i class="fa-regular fa-trash-can"></i></button>
         <button type="button" class="card-action-btn btn-quick-read" onclick="window.quickAction(event, '${msg.uid}', 'read')" title="${msg.seen ? 'Marcar como não lido' : 'Marcar como lido'}">
@@ -1065,9 +1187,10 @@
       const chkHtml = `<input type="checkbox" class="msg-checkbox msg-select-chk" data-uid="${uidStr}" ${isChecked ? 'checked' : ''} title="Selecionar e-mail">`;
 
       if (isBottomLayout) {
-        // Compact Table-Row Layout with aligned columns: Check | Status/Clip | Email | Assunto | Data | Ações
+        // Compact Table-Row Layout: Check | Carta + Joinha + Clipe + Flag | De/E-mail | Assunto | Data | Ações
         const statusIcons = [
           !msg.seen ? '<i class="fa-solid fa-circle" style="font-size: 7px; color: var(--ms-blue);" title="Não lido"></i>' : '<i class="fa-regular fa-envelope-open" style="opacity: 0.45;" title="Lido"></i>',
+          likeBtnHtml,
           msg.hasAttachments ? '<i class="fa-solid fa-paperclip" title="Contém anexo"></i>' : '',
           msg.flagged ? '<i class="fa-solid fa-flag" style="color: #d83b01;" title="Sinalizado"></i>' : ''
         ].filter(Boolean).join('');
@@ -1084,13 +1207,13 @@
           <div class="message-row-actions">${actionsHtml}</div>
         `;
       } else {
-        // Compact Lateral Card Layout with left checkbox
+        // Compact Lateral Card Layout with left checkbox + like button before sender
         card.innerHTML = `
           <div class="message-card-lateral-wrap">
             ${chkHtml}
             <div class="message-card-lateral-body">
               <div class="message-card-top" style="margin-bottom: 2px;">
-                <span class="message-sender">${escapeHtml(displayName)}</span>
+                <span class="message-sender" style="display: inline-flex; align-items: center; gap: 5px;">${likeBtnHtml}<span>${escapeHtml(displayName)}</span></span>
                 <span class="message-date">${timeStr}</span>
               </div>
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
@@ -1148,6 +1271,7 @@
     if (action === 'delete') deleteEmail(msg.uid);
     else if (action === 'read') toggleReadEmail(msg.uid, !msg.seen);
     else if (action === 'flag') toggleFlagEmail(msg.uid, !msg.flagged);
+    else if (action === 'like') toggleLikeEmail(msg);
   };
 
   // Select Message and Fetch Details
@@ -1735,6 +1859,7 @@
 
   function renderReadingDetail(msg) {
     if (!msg) return;
+    updateLikeButtonUI(msg);
 
     const btnEditDraft = document.getElementById('btnEditDraft');
     if (btnEditDraft) {

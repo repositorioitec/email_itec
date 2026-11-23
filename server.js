@@ -89,6 +89,7 @@ let appConfig = {
   calendarByUser: {},
   todosByUser: {},
   emailTemplates: [],
+  messageLikes: {},
   layout: { readingPane: 'right' },
   demoModeIfDisconnected: true
 };
@@ -113,7 +114,8 @@ let appConfig = {
         deletedContactsByUser: { ...(appConfig.deletedContactsByUser || {}), ...(parsed.deletedContactsByUser || {}) },
         calendarByUser: { ...(appConfig.calendarByUser || {}), ...(parsed.calendarByUser || {}) },
         todosByUser: { ...(appConfig.todosByUser || {}), ...(parsed.todosByUser || {}) },
-        emailTemplates: Array.isArray(parsed.emailTemplates) ? parsed.emailTemplates : (appConfig.emailTemplates || [])
+        emailTemplates: Array.isArray(parsed.emailTemplates) ? parsed.emailTemplates : (appConfig.emailTemplates || []),
+        messageLikes: { ...(appConfig.messageLikes || {}), ...(parsed.messageLikes || {}) }
       };
     } catch (e) {
       console.error(`Erro ao carregar ${file}:`, e.message);
@@ -633,6 +635,118 @@ app.post('/api/smtp/send', upload.array('attachments'), async (req, res) => {
     }
 
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================
+// Message Thumbs-Up / Like (Read Confirmation Reaction)
+// ========================
+function normalizeLikeKey(fromEmail, subject) {
+  const cleanFrom = String(fromEmail || '').trim().toLowerCase();
+  const cleanSubject = String(subject || '(sem assunto)')
+    .replace(/^(re|fwd|enc|res)\s*:\s*/i, '')
+    .trim()
+    .toLowerCase();
+  return `${cleanFrom}||${cleanSubject}`;
+}
+
+app.get('/api/messages/likes', (req, res) => {
+  res.json({ success: true, likes: appConfig.messageLikes || {} });
+});
+
+app.post('/api/messages/like', async (req, res) => {
+  try {
+    const userKey = getActiveUserKey();
+    const { fromEmail = '', fromName = '', subject = '', uid, folder = 'INBOX' } = req.body || {};
+    const senderEmail = String(fromEmail || '').trim().toLowerCase();
+    const cleanSubject = String(subject || '(Sem assunto)').trim();
+
+    if (!senderEmail && !cleanSubject) {
+      return res.status(400).json({ success: false, error: 'Dados da mensagem insuficientes para curtir.' });
+    }
+
+    appConfig.messageLikes = appConfig.messageLikes || {};
+    const likeKey = normalizeLikeKey(senderEmail, cleanSubject);
+    const currentLikes = Array.isArray(appConfig.messageLikes[likeKey]) ? appConfig.messageLikes[likeKey] : [];
+
+    const existingIdx = currentLikes.findIndex(item => (item.user || '').toLowerCase() === userKey);
+    let liked = false;
+    let notifiedSender = false;
+
+    if (existingIdx >= 0) {
+      // Toggle off
+      currentLikes.splice(existingIdx, 1);
+      if (currentLikes.length === 0) {
+        delete appConfig.messageLikes[likeKey];
+      } else {
+        appConfig.messageLikes[likeKey] = currentLikes;
+      }
+      liked = false;
+    } else {
+      const userSig = (appConfig.signaturesByUser && appConfig.signaturesByUser[userKey]) || appConfig.signature || {};
+      const userName = (userSig.fullName && userKey === (userSig.email || '').toLowerCase())
+        ? userSig.fullName
+        : userKey;
+      const nowIso = new Date().toISOString();
+      const nowFormatted = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+      // Mark message as read in IMAP (non-blocking)
+      if (uid && imapService.hasCredentials()) {
+        imapService.setFlags(folder, uid, { seen: true }).catch(() => {});
+      }
+
+      // Notify sender via lightweight thumbs-up email if recipient != sender
+      if (senderEmail && senderEmail.includes('@') && senderEmail !== userKey) {
+        const htmlBody = `
+          <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 520px; margin: 0 auto; border: 1px solid #e1dfdd; border-radius: 10px; overflow: hidden; background: #ffffff;">
+            <div style="background: #0078d4; color: #ffffff; padding: 14px 20px; display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 22px;">👍</span>
+              <span style="font-size: 15px; font-weight: 600;">Confirmação de leitura (Joinha)</span>
+            </div>
+            <div style="padding: 18px 20px; color: #323130; font-size: 14px; line-height: 1.5;">
+              <p style="margin: 0 0 10px;">
+                <strong>${userName}</strong> (<a href="mailto:${userKey}" style="color: #0078d4; text-decoration: none;">${userKey}</a>) curtiu com um <strong>👍 joinha</strong> e confirmou a leitura do seu e-mail:
+              </p>
+              <div style="background: #f3f2f1; border-left: 3px solid #0078d4; padding: 10px 14px; border-radius: 4px; margin: 12px 0;">
+                <div style="font-weight: 600; color: #201f1e;">${cleanSubject}</div>
+                <div style="font-size: 12px; color: #605e5c; margin-top: 4px;">Confirmado em ${nowFormatted}</div>
+              </div>
+            </div>
+          </div>
+        `;
+        try {
+          const mailRes = await smtpService.sendMail({
+            to: senderEmail,
+            subject: `👍 ${userName} curtiu seu e-mail: ${cleanSubject}`,
+            text: `${userName} (${userKey}) curtiu com um joinha e confirmou a leitura do seu e-mail "${cleanSubject}" em ${nowFormatted}.`,
+            html: htmlBody
+          });
+          notifiedSender = !!(mailRes && mailRes.success);
+        } catch (mailErr) {
+          console.warn('[Like Notification SMTP]:', mailErr.message);
+        }
+      }
+
+      currentLikes.push({
+        user: userKey,
+        userName,
+        likedAt: nowIso,
+        notified: notifiedSender
+      });
+      appConfig.messageLikes[likeKey] = currentLikes;
+      liked = true;
+    }
+
+    saveConfigSafe(appConfig);
+    res.json({
+      success: true,
+      liked,
+      notifiedSender,
+      likeKey,
+      likes: appConfig.messageLikes
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
