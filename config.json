@@ -295,7 +295,32 @@
       "updatedAt": "2026-11-21T17:32:34.423Z"
     }
   ],
-  "messageLikes": {},
+  "messageLikes": {
+    "liliane.andrade@gruposels.com.br||pedido de papel": [
+      {
+        "user": "clodoaldo.silva@itecensino.com.br",
+        "userName": "Clodoaldo José da Silva",
+        "likedAt": "2026-11-23T16:55:02.461Z",
+        "notified": true
+      }
+    ],
+    "albert.espilari@gmail.com||renovação de matricula aluna": [
+      {
+        "user": "clodoaldo.silva@itecensino.com.br",
+        "userName": "Clodoaldo José da Silva",
+        "likedAt": "2026-11-23T19:41:24.484Z",
+        "notified": true
+      }
+    ],
+    "clodoaldo.itec@gmail.com||": [
+      {
+        "user": "clodoaldo.silva@itecensino.com.br",
+        "userName": "Clodoaldo José da Silva",
+        "likedAt": "2026-11-23T19:41:30.236Z",
+        "notified": true
+      }
+    ]
+  },
   "layout": {
     "readingPane": "bottom"
   },

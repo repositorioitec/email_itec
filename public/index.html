@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=4.7.1">
+  <link rel="stylesheet" href="style.css?v=4.7.2">
 </head>
 
 <body>
@@ -286,10 +286,12 @@
               <div class="sender-avatar" id="readSenderAvatar">DH</div>
               <div class="meta-details">
                 <div class="sender-row">
-                  <span class="sender-name" id="readSenderName">Daniele Henriques</span>
+                  <div class="sender-identity">
+                    <span class="sender-name" id="readSenderName">Daniele Henriques</span>
+                    <span class="sender-email-address" id="readSenderEmail">&lt;daniele.henriques@itecensino.com.br&gt;</span>
+                  </div>
                   <span class="email-timestamp" id="readDate">Qui 12/11/2026 13:58</span>
                 </div>
-                <div class="sender-email-address" id="readSenderEmail">&lt;daniele.henriques@itecensino.com.br&gt;</div>
                 <div class="recipients-row" id="readRecipients">
                   <strong>Para:</strong> <span id="readTo">clodoaldo.silva@itecensino.com.br</span>
                 </div>
@@ -1441,7 +1443,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="app.js?v=4.7.1"></script>
+  <script src="app.js?v=4.7.3"></script>
 </body>
 
 </html>

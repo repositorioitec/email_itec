@@ -5496,7 +5496,7 @@
       };
     }
 
-    // Keyboard Shortcuts (Ctrl+E for search, Ctrl+N for new mail, Ctrl+Enter to send)
+    // Keyboard Shortcuts (Ctrl+E for search, Ctrl+N for new mail, Ctrl+Enter to send, Delete to move to Trash)
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'Enter' || e.code === 'NumpadEnter')) {
         const isComposeOpen = elComposeModal && elComposeModal.style.display === 'flex';
@@ -5518,6 +5518,36 @@
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         openCompose();
+      }
+      if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = e.target;
+        const tag = target ? target.tagName : '';
+        const isCheckbox = tag === 'INPUT' && target.type === 'checkbox';
+        const isTypingField = (!isCheckbox && (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT')) ||
+                              Boolean(target && target.isContentEditable);
+        if (isTypingField) return;
+
+        const openModalIds = [
+          'composeModal', 'settingsModal', 'loginOverlay',
+          'contactModal', 'contactGroupModal', 'calendarEventModal',
+          'createFolderModal', 'attachmentPreviewModal', 'attPreviewModal'
+        ];
+        const anyModalOpen = openModalIds.some(id => {
+          const el = document.getElementById(id);
+          return el && window.getComputedStyle(el).display !== 'none';
+        });
+        if (anyModalOpen) return;
+
+        // Only trigger when Mail list view is visible
+        if (!elMessageListScroll || elMessageListScroll.offsetParent === null) return;
+
+        if (selectedUids.size > 0) {
+          e.preventDefault();
+          bulkDeleteEmails(selectedUids);
+        } else if (selectedMessage) {
+          e.preventDefault();
+          deleteEmail(selectedMessage.uid);
+        }
       }
     }, true);
   }
