@@ -246,7 +246,11 @@ class ImapService {
                         /authentication failed|login failed|auth|credential|invalid user|password/i.test(serverText);
 
     if (isAuthError) {
-      return `Falha de autenticação: O servidor ${this.config.imap?.host || 'IMAP'} rejeitou o usuário ou a senha ("Authentication failed"). Por favor, confirme se a senha digitada é exatamente a mesma que você usa no Webmail Roundcube.`;
+      const host = (this.config.imap?.host || '').toLowerCase();
+      if (host.includes('gmail.com') || host.includes('googlemail.com')) {
+        return 'O Gmail não aceita a senha normal no IMAP. Gere uma "Senha de App" de 16 caracteres em myaccount.google.com/apppasswords (requer Verificação em duas etapas ativa) e cole aqui.';
+      }
+      return `Falha de autenticação: O servidor ${this.config.imap?.host || 'IMAP'} rejeitou o usuário ou a senha ("Authentication failed"). Por favor, confirme se a senha digitada está correta.`;
     }
 
     if (err.code === 'ETIMEDOUT') {

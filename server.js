@@ -136,7 +136,13 @@ app.get('/api/server-boot-id', (_req, res) => {
 });
 // ──────────────────────────────────────────────────────────────────────────────
 
-// Stateless Session Middleware for Vercel Serverless (restores user credentials across Lambda instances)
+// Keep default host/port to restore when switching between accounts with custom vs default servers
+const DEFAULT_IMAP_HOST = appConfig.imap.host;
+const DEFAULT_IMAP_PORT = appConfig.imap.port;
+const DEFAULT_SMTP_HOST = appConfig.smtp.host;
+const DEFAULT_SMTP_PORT = appConfig.smtp.port;
+
+// Stateless Session Middleware (restores active account credentials per request)
 app.use((req, res, next) => {
   const hdrUser = req.headers['x-imap-user'];
   const hdrPassB64 = req.headers['x-imap-pass'];
@@ -144,11 +150,28 @@ app.use((req, res, next) => {
     try {
       const decodedPass = Buffer.from(String(hdrPassB64), 'base64').toString('utf8');
       const cleanUser = String(hdrUser).trim().toLowerCase();
-      if (cleanUser && decodedPass && (appConfig.imap.user !== cleanUser || appConfig.imap.password !== decodedPass)) {
+      const hdrImapHost = (req.headers['x-imap-host'] || '').trim() || DEFAULT_IMAP_HOST;
+      const hdrImapPort = (req.headers['x-imap-port'] || '').trim() || DEFAULT_IMAP_PORT;
+      const hdrSmtpHost = (req.headers['x-smtp-host'] || '').trim() || hdrImapHost || DEFAULT_SMTP_HOST;
+      const hdrSmtpPort = (req.headers['x-smtp-port'] || '').trim() || DEFAULT_SMTP_PORT;
+
+      const changed =
+        appConfig.imap.user !== cleanUser ||
+        appConfig.imap.password !== decodedPass ||
+        appConfig.imap.host !== hdrImapHost ||
+        String(appConfig.imap.port) !== String(hdrImapPort) ||
+        appConfig.smtp.host !== hdrSmtpHost ||
+        String(appConfig.smtp.port) !== String(hdrSmtpPort);
+
+      if (cleanUser && decodedPass && changed) {
         appConfig.imap.user = cleanUser;
         appConfig.imap.password = decodedPass;
+        appConfig.imap.host = hdrImapHost;
+        appConfig.imap.port = hdrImapPort;
         appConfig.smtp.user = cleanUser;
         appConfig.smtp.password = decodedPass;
+        appConfig.smtp.host = hdrSmtpHost;
+        appConfig.smtp.port = hdrSmtpPort;
         imapService.updateConfig(appConfig);
         smtpService.updateConfig(appConfig);
       }
@@ -158,6 +181,78 @@ app.use((req, res, next) => {
 });
 
 // API Endpoints
+
+// Verify & connect an additional email account without overwriting the active account
+app.post('/api/auth/verify-account', async (req, res) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    let password = req.body.password || '';
+    const isGmail = email.endsWith('@gmail.com') || email.endsWith('@googlemail.com');
+    const imapHost = (req.body.imapHost || '').trim() || (isGmail ? 'imap.gmail.com' : DEFAULT_IMAP_HOST);
+    const imapPort = (req.body.imapPort || '').trim() || (isGmail ? '993' : DEFAULT_IMAP_PORT);
+    const smtpHost = (req.body.smtpHost || '').trim() || (isGmail ? 'smtp.gmail.com' : (imapHost || DEFAULT_SMTP_HOST));
+    const smtpPort = (req.body.smtpPort || '').trim() || (isGmail ? '465' : DEFAULT_SMTP_PORT);
+
+    // Google App Passwords are often copied with spaces (e.g. "abcd efgh ijkl mnop")
+    if (isGmail || imapHost.toLowerCase().includes('gmail.com')) {
+      password = password.replace(/\s+/g, '');
+    }
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Informe o e-mail e a senha da conta.' });
+    }
+
+    const tempConfig = {
+      ...appConfig,
+      imap: {
+        ...appConfig.imap,
+        host: imapHost,
+        port: imapPort,
+        user: email,
+        password
+      },
+      smtp: {
+        ...appConfig.smtp,
+        host: smtpHost,
+        port: smtpPort,
+        user: email,
+        password
+      }
+    };
+
+    const tempService = new ImapService(tempConfig);
+    const testResult = await tempService.testConnection();
+    if (!testResult.success) {
+      return res.status(401).json({
+        success: false,
+        message: testResult.message || 'Falha na autenticação. Verifique o e-mail e a senha.'
+      });
+    }
+
+    const folders = await tempService.getFolders();
+    if (tempService.activeClient) {
+      try { await tempService.activeClient.logout(); } catch (e) {}
+    }
+
+    if (!Array.isArray(appConfig.savedEmails)) appConfig.savedEmails = [];
+    if (!appConfig.savedEmails.some(e => e.toLowerCase() === email)) {
+      appConfig.savedEmails.push(email);
+      saveConfigSafe(appConfig);
+    }
+
+    res.json({
+      success: true,
+      email,
+      imapHost: imapHost === DEFAULT_IMAP_HOST ? '' : imapHost,
+      imapPort: String(imapPort) === String(DEFAULT_IMAP_PORT) ? '' : String(imapPort),
+      smtpHost: smtpHost === DEFAULT_SMTP_HOST ? '' : smtpHost,
+      smtpPort: String(smtpPort) === String(DEFAULT_SMTP_PORT) ? '' : String(smtpPort),
+      folders
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // Login & Switch User Account
 app.post('/api/auth/login', async (req, res) => {

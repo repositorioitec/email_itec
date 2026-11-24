@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Outlook Webmail - Protocolo IMAP</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=4.7.2">
+  <link rel="stylesheet" href="style.css?v=4.8.0">
 </head>
 
 <body>
@@ -62,11 +62,17 @@
         <div class="user-profile-menu" id="userProfileMenu" style="display: none;">
           <div class="user-profile-menu-header">
             <div class="user-profile-menu-email" id="profileMenuEmail">clodoaldo.silva@itecensino.com.br</div>
-            <div style="font-size: 11px; color: var(--text-secondary);">Conta conectada</div>
+            <div style="font-size: 11px; color: var(--text-secondary);">Conta ativa</div>
           </div>
+          <div id="profileConnectedAccountsList" class="profile-accounts-list" style="display: none;"></div>
+          <button type="button" class="user-profile-menu-item" id="btnMenuAddAccount">
+            <i class="fa-solid fa-user-plus" style="color: var(--ms-blue);"></i>
+            <span>Conectar outra conta</span>
+          </button>
+          <div class="user-profile-menu-divider"></div>
           <button type="button" class="user-profile-menu-item" id="btnMenuLogout">
             <i class="fa-solid fa-right-from-bracket" style="color: #a80000;"></i>
-            <span>Sair</span>
+            <span>Sair de todas as contas</span>
           </button>
         </div>
       </div>
@@ -1436,6 +1442,70 @@
     </div>
   </div>
 
+  <!-- Connect Another Account Modal -->
+  <div class="modal-overlay" id="addAccountModal" style="display: none; z-index: 2680;">
+    <div class="modal-dialog" style="width: 440px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-user-plus" style="color: var(--ms-blue); margin-right: 8px;"></i>Conectar outra conta</h3>
+        <button type="button" class="window-btn" id="btnCloseAddAccountModal" aria-label="Fechar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form id="addAccountForm" autocomplete="off">
+        <div class="modal-body" style="padding: 18px 20px;">
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+            Adicione outra conta de e-mail para gerenciar as pastas separadamente na barra lateral.
+          </p>
+          <div class="form-group">
+            <label for="addAccEmailInput">Endereço de E-mail:</label>
+            <input type="email" class="form-control" id="addAccEmailInput" placeholder="outra.conta@itecensino.com.br" required>
+          </div>
+          <div class="form-group">
+            <label for="addAccPasswordInput">Senha do Webmail:</label>
+            <input type="password" class="form-control" id="addAccPasswordInput" placeholder="Digite a senha da conta" required>
+            <div id="addAccGmailHint" style="display: none; margin-top: 6px; padding: 8px 10px; border-radius: 6px; background: #eff6fc; border: 1px solid #b4d6fa; color: #004578; font-size: 11.5px; line-height: 1.45;">
+              <i class="fa-solid fa-circle-info"></i>
+              <strong>Conta Gmail detectada:</strong> o Google não aceita a senha normal no IMAP. Use uma
+              <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" style="color: #0078d4; font-weight: 600;">Senha de App (16 caracteres)</a>
+              (com Verificação em duas etapas ativa). Os servidores IMAP/SMTP do Gmail já foram preenchidos automaticamente.
+            </div>
+          </div>
+          <details class="add-account-advanced">
+            <summary>Servidor diferente? (Opcional — IMAP / SMTP)</summary>
+            <div class="form-row" style="margin-top: 10px;">
+              <div class="form-group" style="flex: 2; margin-bottom: 8px;">
+                <label for="addAccImapHost">Servidor IMAP:</label>
+                <input type="text" class="form-control" id="addAccImapHost" placeholder="Padrão: h58.servidorhh.com">
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 8px;">
+                <label for="addAccImapPort">Porta:</label>
+                <input type="number" class="form-control" id="addAccImapPort" placeholder="993">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex: 2; margin-bottom: 0;">
+                <label for="addAccSmtpHost">Servidor SMTP:</label>
+                <input type="text" class="form-control" id="addAccSmtpHost" placeholder="Padrão: mesmo do IMAP">
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label for="addAccSmtpPort">Porta:</label>
+                <input type="number" class="form-control" id="addAccSmtpPort" placeholder="465">
+              </div>
+            </div>
+          </details>
+          <div id="addAccErrorBox" class="login-error-box" style="display: none; margin-top: 10px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="action-btn" id="btnCancelAddAccountModal">Cancelar</button>
+          <button type="submit" class="action-btn primary" id="btnSubmitAddAccount">
+            <i class="fa-solid fa-plug-circle-plus"></i>
+            <span>Conectar Conta</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div class="toast" id="toastNotification">
     <i class="fa-solid fa-circle-info"></i>
@@ -1443,7 +1513,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="app.js?v=4.7.3"></script>
+  <script src="app.js?v=4.8.1"></script>
 </body>
 
 </html>

@@ -26,10 +26,63 @@
     setBootId:    (v) => localStorage.setItem('outlook_server_boot_id', v),
     getLoginDate: () => localStorage.getItem('outlook_session_login_date'),
     setLoginDate: (v) => localStorage.setItem('outlook_session_login_date', v),
+    getAccounts() {
+      let list = [];
+      try {
+        const raw = localStorage.getItem('outlook_connected_accounts');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) list = parsed.filter(a => a && a.email && a.passB64);
+        }
+      } catch (e) {}
+      const curUser = (this.getUser() || '').trim().toLowerCase();
+      const curPass = this.getPass() || '';
+      if (curUser && curPass && !list.some(a => a.email.toLowerCase() === curUser)) {
+        list.unshift({ email: curUser, passB64: curPass });
+        this.saveAccounts(list);
+      }
+      return list;
+    },
+    saveAccounts(list) {
+      try {
+        localStorage.setItem('outlook_connected_accounts', JSON.stringify(list || []));
+      } catch (e) {}
+    },
+    addAccount(acc) {
+      if (!acc || !acc.email || !acc.passB64) return;
+      const email = acc.email.trim().toLowerCase();
+      const list = this.getAccounts().filter(a => a.email.toLowerCase() !== email);
+      list.push({
+        email,
+        passB64: acc.passB64,
+        imapHost: acc.imapHost || '',
+        imapPort: acc.imapPort || '',
+        smtpHost: acc.smtpHost || '',
+        smtpPort: acc.smtpPort || ''
+      });
+      this.saveAccounts(list);
+    },
+    removeAccount(email) {
+      const target = String(email || '').trim().toLowerCase();
+      const list = this.getAccounts().filter(a => a.email.toLowerCase() !== target);
+      this.saveAccounts(list);
+      return list;
+    },
+    getActiveAccountObj() {
+      const curUser = (this.getUser() || '').trim().toLowerCase();
+      const list = this.getAccounts();
+      return list.find(a => a.email.toLowerCase() === curUser) || (curUser ? { email: curUser, passB64: this.getPass() || '' } : null);
+    },
+    setActiveAccount(acc) {
+      if (!acc || !acc.email) return;
+      this.setUser(acc.email.trim().toLowerCase());
+      if (acc.passB64) this.setPass(acc.passB64);
+    },
     clearAll() {
       this.clearAuth();
       this.clearUser();
       this.clearPass();
+      localStorage.removeItem('outlook_connected_accounts');
       localStorage.removeItem('outlook_server_boot_id');
       localStorage.removeItem('outlook_session_login_date');
       // Clean up any legacy sessionStorage keys
@@ -56,17 +109,22 @@
     return currentServerBootId;
   }
 
-  // Intercept fetch to attach active session credentials on Vercel Serverless
+  // Intercept fetch to attach active account credentials
   const originalFetch = window.fetch.bind(window);
   window.fetch = function (input, init = {}) {
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     if (url.startsWith('/api/')) {
-      const sUser = SESSION_STORE.getUser();
-      const sPass = SESSION_STORE.getPass();
-      if (sUser && sPass) {
+      const activeAcc = SESSION_STORE.getActiveAccountObj();
+      if (activeAcc && activeAcc.email && activeAcc.passB64) {
         const headers = new Headers(init.headers || {});
-        if (!headers.has('x-imap-user')) headers.set('x-imap-user', sUser);
-        if (!headers.has('x-imap-pass')) headers.set('x-imap-pass', sPass);
+        if (!headers.has('x-imap-user')) {
+          headers.set('x-imap-user', activeAcc.email);
+          headers.set('x-imap-pass', activeAcc.passB64);
+          if (activeAcc.imapHost) headers.set('x-imap-host', activeAcc.imapHost);
+          if (activeAcc.imapPort) headers.set('x-imap-port', String(activeAcc.imapPort));
+          if (activeAcc.smtpHost) headers.set('x-smtp-host', activeAcc.smtpHost);
+          if (activeAcc.smtpPort) headers.set('x-smtp-port', String(activeAcc.smtpPort));
+        }
         init.headers = headers;
       }
     }
@@ -430,11 +488,14 @@
 
       if (data.success) {
         const bootId = await fetchServerBootId();
+        let passB64 = '';
+        try {
+          passB64 = btoa(unescape(encodeURIComponent(password)));
+        } catch (e) {}
         SESSION_STORE.setAuth('true');
         SESSION_STORE.setUser(email);
-        try {
-          SESSION_STORE.setPass(btoa(unescape(encodeURIComponent(password))));
-        } catch (e) {}
+        if (passB64) SESSION_STORE.setPass(passB64);
+        SESSION_STORE.addAccount({ email, passB64 });
         if (bootId) SESSION_STORE.setBootId(bootId);
         SESSION_STORE.setLoginDate(getTodayDateKey());
 
@@ -522,17 +583,240 @@
     return (first + last).toUpperCase() || '?';
   }
 
-  // Load Folders
-  async function loadFolders() {
+  // Multi-account folders state
+  const accountFoldersMap = {};
+  const collapsedAccounts = new Set();
+
+  function getActiveAccountEmail() {
+    return (SESSION_STORE.getUser() || document.getElementById('cfgImapUser')?.value || '').trim().toLowerCase();
+  }
+
+  async function fetchFoldersForAccount(acc) {
+    if (!acc || !acc.email || !acc.passB64) return [];
+    const headers = {
+      'x-imap-user': acc.email,
+      'x-imap-pass': acc.passB64
+    };
+    if (acc.imapHost) headers['x-imap-host'] = acc.imapHost;
+    if (acc.imapPort) headers['x-imap-port'] = String(acc.imapPort);
+    if (acc.smtpHost) headers['x-smtp-host'] = acc.smtpHost;
+    if (acc.smtpPort) headers['x-smtp-port'] = String(acc.smtpPort);
+    const res = await fetch('/api/imap/folders', { headers });
+    const data = await res.json();
+    return (data.success && Array.isArray(data.folders)) ? data.folders : [];
+  }
+
+  // Load Folders (active account + any additional connected accounts)
+  async function loadFolders(forceAllAccounts = false) {
     try {
+      const activeEmail = getActiveAccountEmail();
       const res = await fetch('/api/imap/folders');
       const data = await res.json();
       if (data.success && data.folders) {
         folders = data.folders;
+        if (activeEmail) {
+          accountFoldersMap[activeEmail] = data.folders;
+        }
         renderFolders();
       }
+
+      const accounts = SESSION_STORE.getAccounts();
+      for (const acc of accounts) {
+        const key = acc.email.toLowerCase();
+        if (key === activeEmail) continue;
+        if (forceAllAccounts || !Array.isArray(accountFoldersMap[key])) {
+          try {
+            accountFoldersMap[key] = await fetchFoldersForAccount(acc);
+            renderFolders();
+          } catch (accErr) {
+            console.warn(`Erro ao carregar pastas da conta ${acc.email}:`, accErr.message);
+          }
+        }
+      }
+      renderProfileConnectedAccounts();
     } catch (err) {
       console.error('Erro ao carregar pastas:', err);
+    }
+  }
+
+  async function switchActiveAccount(targetEmail, targetFolderPath = 'INBOX', targetFolderName = 'Caixa de entrada') {
+    const cleanTarget = String(targetEmail || '').trim().toLowerCase();
+    const accounts = SESSION_STORE.getAccounts();
+    const acc = accounts.find(a => a.email.toLowerCase() === cleanTarget);
+    if (!acc) return;
+
+    const currentActive = getActiveAccountEmail();
+    if (currentActive !== cleanTarget) {
+      SESSION_STORE.setActiveAccount(acc);
+      currentFolder = targetFolderPath || 'INBOX';
+
+      const localSig = localStorage.getItem('outlook_sig_' + cleanTarget);
+      if (localSig) {
+        try { sigState = { ...sigState, ...JSON.parse(localSig) }; } catch (e) {}
+      }
+
+      await loadConfig();
+      if (Array.isArray(accountFoldersMap[cleanTarget])) {
+        folders = accountFoldersMap[cleanTarget];
+      } else {
+        await loadFolders();
+      }
+      renderProfileConnectedAccounts();
+      loadContacts();
+      loadCalendarEvents();
+      loadTodos();
+      loadEmailTemplates();
+      showToast(`Conta ativa: ${cleanTarget}`);
+    }
+
+    selectFolder(targetFolderPath || 'INBOX', targetFolderName || 'Caixa de entrada');
+  }
+
+  async function disconnectAccount(targetEmail) {
+    const cleanTarget = String(targetEmail || '').trim().toLowerCase();
+    const accounts = SESSION_STORE.getAccounts();
+    if (accounts.length <= 1) {
+      endUserSession();
+      return;
+    }
+    if (!confirm(`Deseja desconectar a conta "${cleanTarget}"?`)) return;
+
+    const wasActive = getActiveAccountEmail() === cleanTarget;
+    delete accountFoldersMap[cleanTarget];
+    collapsedAccounts.delete(cleanTarget);
+    const remaining = SESSION_STORE.removeAccount(cleanTarget);
+
+    if (remaining.length === 0) {
+      endUserSession();
+      return;
+    }
+
+    if (wasActive) {
+      await switchActiveAccount(remaining[0].email, 'INBOX', 'Caixa de entrada');
+    } else {
+      renderFolders();
+      renderProfileConnectedAccounts();
+    }
+    showToast(`Conta "${cleanTarget}" desconectada.`);
+  }
+
+  function renderProfileConnectedAccounts() {
+    const listEl = document.getElementById('profileConnectedAccountsList');
+    if (!listEl) return;
+    const accounts = SESSION_STORE.getAccounts();
+    const activeEmail = getActiveAccountEmail();
+
+    if (accounts.length <= 1) {
+      listEl.style.display = 'none';
+      listEl.innerHTML = '';
+      return;
+    }
+
+    listEl.style.display = 'block';
+    listEl.innerHTML = '';
+    accounts.forEach(acc => {
+      const isAct = acc.email.toLowerCase() === activeEmail;
+      const row = document.createElement('div');
+      row.className = `profile-account-row ${isAct ? 'active' : ''}`;
+      row.innerHTML = `
+        <div class="profile-account-email" title="${escapeHtml(acc.email)}">
+          <i class="fa-solid ${isAct ? 'fa-circle-check' : 'fa-envelope'}" style="font-size: 11px; color: ${isAct ? '#107c41' : 'var(--text-secondary)'};"></i>
+          <span>${escapeHtml(acc.email)}</span>
+        </div>
+        <button type="button" class="profile-account-disconnect" title="Desconectar ${escapeHtml(acc.email)}" aria-label="Desconectar conta">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      `;
+      row.onclick = (e) => {
+        if (e.target.closest('.profile-account-disconnect')) return;
+        const menu = document.getElementById('userProfileMenu');
+        if (menu) menu.style.display = 'none';
+        if (!isAct) switchActiveAccount(acc.email, 'INBOX', 'Caixa de entrada');
+      };
+      row.querySelector('.profile-account-disconnect').onclick = (e) => {
+        e.stopPropagation();
+        disconnectAccount(acc.email);
+      };
+      listEl.appendChild(row);
+    });
+  }
+
+  function openAddAccountModal() {
+    const modal = document.getElementById('addAccountModal');
+    const form = document.getElementById('addAccountForm');
+    const errBox = document.getElementById('addAccErrorBox');
+    const emailInput = document.getElementById('addAccEmailInput');
+    if (form) form.reset();
+    if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
+    if (modal) modal.style.display = 'flex';
+    setTimeout(() => emailInput?.focus(), 50);
+  }
+
+  function closeAddAccountModal() {
+    const modal = document.getElementById('addAccountModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function handleAddAccountSubmit(e) {
+    e.preventDefault();
+    const email = (document.getElementById('addAccEmailInput')?.value || '').trim().toLowerCase();
+    const password = document.getElementById('addAccPasswordInput')?.value || '';
+    const imapHost = (document.getElementById('addAccImapHost')?.value || '').trim();
+    const imapPort = (document.getElementById('addAccImapPort')?.value || '').trim();
+    const smtpHost = (document.getElementById('addAccSmtpHost')?.value || '').trim();
+    const smtpPort = (document.getElementById('addAccSmtpPort')?.value || '').trim();
+    const errBox = document.getElementById('addAccErrorBox');
+    const btn = document.getElementById('btnSubmitAddAccount');
+
+    if (!email || !password) return;
+    if (errBox) errBox.style.display = 'none';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Conectando...</span>';
+    }
+
+    try {
+      const res = await fetch('/api/auth/verify-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, imapHost, imapPort, smtpHost, smtpPort })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const isGmailAcc = email.endsWith('@gmail.com') || email.endsWith('@googlemail.com') || (data.imapHost || '').toLowerCase().includes('gmail.com');
+        const cleanPassForStore = isGmailAcc ? password.replace(/\s+/g, '') : password;
+        let passB64 = '';
+        try { passB64 = btoa(unescape(encodeURIComponent(cleanPassForStore))); } catch (err) {}
+        SESSION_STORE.addAccount({
+          email,
+          passB64,
+          imapHost: data.imapHost || '',
+          imapPort: data.imapPort || '',
+          smtpHost: data.smtpHost || '',
+          smtpPort: data.smtpPort || ''
+        });
+        accountFoldersMap[email] = Array.isArray(data.folders) ? data.folders : [];
+        collapsedAccounts.delete(email);
+        closeAddAccountModal();
+        renderFolders();
+        renderProfileConnectedAccounts();
+        showToast(`Conta "${email}" conectada na árvore de pastas!`);
+      } else {
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(data.message || 'Falha na autenticação.')}`;
+        }
+      }
+    } catch (err) {
+      if (errBox) {
+        errBox.style.display = 'block';
+        errBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Erro de conexão: ${escapeHtml(err.message)}`;
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-plug-circle-plus"></i> <span>Conectar Conta</span>';
+      }
     }
   }
 
@@ -733,16 +1017,28 @@
       }
     }
 
-    const tree = buildFolderTree(folders);
+    const activeEmail = getActiveAccountEmail();
+    const accounts = SESSION_STORE.getAccounts();
+    const accountEntries = accounts.length > 0
+      ? accounts.map(acc => ({
+          email: acc.email.toLowerCase(),
+          list: (acc.email.toLowerCase() === activeEmail)
+            ? folders
+            : (accountFoldersMap[acc.email.toLowerCase()] || [])
+        }))
+      : [{ email: activeEmail || 'conta', list: folders }];
 
-    const renderNode = (folder, depth) => {
+    const renderNode = (accEmail, isAccActive, folder, depth) => {
       const hasChildren = folder.children && folder.children.length > 0;
-      const isCollapsed = collapsedFolders.has(folder.path.toLowerCase());
+      const collapseKey = `${accEmail}::${folder.path.toLowerCase()}`;
+      const isCollapsed = collapsedFolders.has(collapseKey);
 
       const item = document.createElement('div');
-      item.className = `folder-item ${folder.path.toLowerCase() === currentFolder.toLowerCase() ? 'active' : ''}`;
+      const isFolderActive = isAccActive && folder.path.toLowerCase() === currentFolder.toLowerCase();
+      item.className = `folder-item ${isFolderActive ? 'active' : ''}`;
       item.setAttribute('data-path', folder.path);
-      item.style.paddingLeft = `${10 + depth * 16}px`;
+      item.setAttribute('data-account', accEmail);
+      item.style.paddingLeft = `${14 + depth * 15}px`;
 
       const left = document.createElement('div');
       left.className = 'folder-left';
@@ -755,9 +1051,8 @@
         expandBtn.innerHTML = `<i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}"></i>`;
         expandBtn.onclick = (e) => {
           e.stopPropagation();
-          const key = folder.path.toLowerCase();
-          if (collapsedFolders.has(key)) collapsedFolders.delete(key);
-          else collapsedFolders.add(key);
+          if (collapsedFolders.has(collapseKey)) collapsedFolders.delete(collapseKey);
+          else collapsedFolders.add(collapseKey);
           renderFolders();
         };
         left.appendChild(expandBtn);
@@ -787,8 +1082,11 @@
       addSubBtn.className = 'folder-action-btn';
       addSubBtn.title = `Criar subpasta em ${folder.name}`;
       addSubBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
-      addSubBtn.onclick = (e) => {
+      addSubBtn.onclick = async (e) => {
         e.stopPropagation();
+        if (!isAccActive) {
+          await switchActiveAccount(accEmail, folder.path, folder.name);
+        }
         openCreateFolderModal(folder.path);
       };
       actions.appendChild(addSubBtn);
@@ -799,8 +1097,11 @@
         delBtn.className = 'folder-action-btn delete';
         delBtn.title = `Excluir subpasta ${folder.name}`;
         delBtn.innerHTML = '<i class="fa-regular fa-trash-can"></i>';
-        delBtn.onclick = (e) => {
+        delBtn.onclick = async (e) => {
           e.stopPropagation();
+          if (!isAccActive) {
+            await switchActiveAccount(accEmail, 'INBOX', 'Caixa de entrada');
+          }
           handleDeleteFolder(folder);
         };
         actions.appendChild(delBtn);
@@ -820,17 +1121,80 @@
 
       item.onclick = (e) => {
         e.preventDefault();
-        selectFolder(folder.path, folder.name);
+        if (!isAccActive) {
+          switchActiveAccount(accEmail, folder.path, folder.name);
+        } else {
+          selectFolder(folder.path, folder.name);
+        }
       };
 
       elFoldersList.appendChild(item);
 
       if (hasChildren && !isCollapsed) {
-        folder.children.forEach(child => renderNode(child, depth + 1));
+        folder.children.forEach(child => renderNode(accEmail, isAccActive, child, depth + 1));
       }
     };
 
-    tree.forEach(rootNode => renderNode(rootNode, 0));
+    accountEntries.forEach(({ email, list }) => {
+      const isAccActive = email === activeEmail;
+      const isAccCollapsed = collapsedAccounts.has(email);
+
+      const accHeader = document.createElement('div');
+      accHeader.className = `folder-account-header ${isAccActive ? 'active-account' : ''}`;
+      accHeader.title = email;
+
+      const accLeft = document.createElement('div');
+      accLeft.className = 'folder-account-left';
+      accLeft.innerHTML = `
+        <i class="fa-solid ${isAccCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}" style="font-size: 9px; width: 12px; text-align: center;"></i>
+        <i class="fa-solid fa-envelope-circle-check" style="font-size: 12px; color: ${isAccActive ? 'var(--ms-blue)' : 'var(--text-secondary)'};"></i>
+        <span class="folder-account-label">${escapeHtml(email)}</span>
+      `;
+
+      const accActions = document.createElement('div');
+      accActions.className = 'folder-account-actions';
+
+      const accAddBtn = document.createElement('button');
+      accAddBtn.type = 'button';
+      accAddBtn.className = 'folder-action-btn';
+      accAddBtn.title = `Nova pasta em ${email}`;
+      accAddBtn.innerHTML = '<i class="fa-solid fa-folder-plus"></i>';
+      accAddBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!isAccActive) await switchActiveAccount(email, 'INBOX', 'Caixa de entrada');
+        openCreateFolderModal('INBOX');
+      };
+      accActions.appendChild(accAddBtn);
+
+      if (accountEntries.length > 1) {
+        const accDelBtn = document.createElement('button');
+        accDelBtn.type = 'button';
+        accDelBtn.className = 'folder-action-btn delete';
+        accDelBtn.title = `Desconectar ${email}`;
+        accDelBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        accDelBtn.onclick = (e) => {
+          e.stopPropagation();
+          disconnectAccount(email);
+        };
+        accActions.appendChild(accDelBtn);
+      }
+
+      accHeader.appendChild(accLeft);
+      accHeader.appendChild(accActions);
+
+      accHeader.onclick = () => {
+        if (collapsedAccounts.has(email)) collapsedAccounts.delete(email);
+        else collapsedAccounts.add(email);
+        renderFolders();
+      };
+
+      elFoldersList.appendChild(accHeader);
+
+      if (!isAccCollapsed) {
+        const tree = buildFolderTree(list);
+        tree.forEach(rootNode => renderNode(email, isAccActive, rootNode, 0));
+      }
+    });
 
     // Update Favorites selection
     document.querySelectorAll('#favoritesList .folder-item').forEach(item => {
@@ -5464,6 +5828,46 @@
         if (elUserProfileMenu) elUserProfileMenu.style.display = 'none';
         triggerAccountSwitch();
       };
+    }
+
+    const elBtnMenuAddAccount = document.getElementById('btnMenuAddAccount');
+    const elAddAccountModal = document.getElementById('addAccountModal');
+    const elAddAccountForm = document.getElementById('addAccountForm');
+    const elBtnCloseAddAccountModal = document.getElementById('btnCloseAddAccountModal');
+    const elBtnCancelAddAccountModal = document.getElementById('btnCancelAddAccountModal');
+
+    if (elBtnMenuAddAccount) {
+      elBtnMenuAddAccount.onclick = () => {
+        if (elUserProfileMenu) elUserProfileMenu.style.display = 'none';
+        openAddAccountModal();
+      };
+    }
+    if (elAddAccountForm) elAddAccountForm.onsubmit = handleAddAccountSubmit;
+    const elAddAccEmailInput = document.getElementById('addAccEmailInput');
+    if (elAddAccEmailInput) {
+      elAddAccEmailInput.addEventListener('input', () => {
+        const val = (elAddAccEmailInput.value || '').trim().toLowerCase();
+        const isGmail = val.endsWith('@gmail.com') || val.endsWith('@googlemail.com');
+        const hint = document.getElementById('addAccGmailHint');
+        if (hint) hint.style.display = isGmail ? 'block' : 'none';
+        if (isGmail) {
+          const ih = document.getElementById('addAccImapHost');
+          const ip = document.getElementById('addAccImapPort');
+          const sh = document.getElementById('addAccSmtpHost');
+          const sp = document.getElementById('addAccSmtpPort');
+          if (ih && !ih.value) ih.value = 'imap.gmail.com';
+          if (ip && !ip.value) ip.value = '993';
+          if (sh && !sh.value) sh.value = 'smtp.gmail.com';
+          if (sp && !sp.value) sp.value = '465';
+        }
+      });
+    }
+    if (elBtnCloseAddAccountModal) elBtnCloseAddAccountModal.onclick = closeAddAccountModal;
+    if (elBtnCancelAddAccountModal) elBtnCancelAddAccountModal.onclick = closeAddAccountModal;
+    if (elAddAccountModal) {
+      elAddAccountModal.addEventListener('click', (e) => {
+        if (e.target === elAddAccountModal) closeAddAccountModal();
+      });
     }
 
     const btnToggleLoginPass = document.getElementById('btnToggleLoginPass');
