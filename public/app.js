@@ -488,14 +488,23 @@
 
       if (data.success) {
         const bootId = await fetchServerBootId();
+        const isGmailLogin = email.endsWith('@gmail.com') || email.endsWith('@googlemail.com') || (data.imapHost || '').toLowerCase().includes('gmail.com');
+        const cleanPassLogin = isGmailLogin ? password.replace(/\s+/g, '') : password;
         let passB64 = '';
         try {
-          passB64 = btoa(unescape(encodeURIComponent(password)));
+          passB64 = btoa(unescape(encodeURIComponent(cleanPassLogin)));
         } catch (e) {}
         SESSION_STORE.setAuth('true');
         SESSION_STORE.setUser(email);
         if (passB64) SESSION_STORE.setPass(passB64);
-        SESSION_STORE.addAccount({ email, passB64 });
+        SESSION_STORE.addAccount({
+          email,
+          passB64,
+          imapHost: data.imapHost || '',
+          imapPort: data.imapPort || '',
+          smtpHost: data.smtpHost || '',
+          smtpPort: data.smtpPort || ''
+        });
         if (bootId) SESSION_STORE.setBootId(bootId);
         SESSION_STORE.setLoginDate(getTodayDateKey());
 

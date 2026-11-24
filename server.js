@@ -136,11 +136,44 @@ app.get('/api/server-boot-id', (_req, res) => {
 });
 // ──────────────────────────────────────────────────────────────────────────────
 
-// Keep default host/port to restore when switching between accounts with custom vs default servers
-const DEFAULT_IMAP_HOST = appConfig.imap.host;
-const DEFAULT_IMAP_PORT = appConfig.imap.port;
-const DEFAULT_SMTP_HOST = appConfig.smtp.host;
-const DEFAULT_SMTP_PORT = appConfig.smtp.port;
+// Keep default Roundcube / ServidorHH host & port (never let Gmail overwrite the default!)
+const DEFAULT_IMAP_HOST = (appConfig.imap.host && !/gmail\.com|googlemail\.com/i.test(appConfig.imap.host))
+  ? appConfig.imap.host
+  : 'h58.servidorhh.com';
+const DEFAULT_IMAP_PORT = appConfig.imap.port || '993';
+const DEFAULT_SMTP_HOST = (appConfig.smtp.host && !/gmail\.com|googlemail\.com/i.test(appConfig.smtp.host))
+  ? appConfig.smtp.host
+  : 'h58.servidorhh.com';
+const DEFAULT_SMTP_PORT = appConfig.smtp.port || '587';
+
+const KNOWN_EMAIL_PROVIDERS = {
+  'gmail.com':      { imapHost: 'imap.gmail.com',        imapPort: '993', smtpHost: 'smtp.gmail.com',        smtpPort: '465', stripSpaces: true },
+  'googlemail.com': { imapHost: 'imap.gmail.com',        imapPort: '993', smtpHost: 'smtp.gmail.com',        smtpPort: '465', stripSpaces: true },
+  'outlook.com':    { imapHost: 'outlook.office365.com', imapPort: '993', smtpHost: 'smtp-mail.outlook.com', smtpPort: '587' },
+  'hotmail.com':    { imapHost: 'outlook.office365.com', imapPort: '993', smtpHost: 'smtp-mail.outlook.com', smtpPort: '587' },
+  'live.com':       { imapHost: 'outlook.office365.com', imapPort: '993', smtpHost: 'smtp-mail.outlook.com', smtpPort: '587' },
+  'yahoo.com':      { imapHost: 'imap.mail.yahoo.com',   imapPort: '993', smtpHost: 'smtp.mail.yahoo.com',   smtpPort: '465' },
+  'yahoo.com.br':   { imapHost: 'imap.mail.yahoo.com',   imapPort: '993', smtpHost: 'smtp.mail.yahoo.com',   smtpPort: '465' },
+  'icloud.com':     { imapHost: 'imap.mail.me.com',      imapPort: '993', smtpHost: 'smtp.mail.me.com',      smtpPort: '587' },
+  'me.com':         { imapHost: 'imap.mail.me.com',      imapPort: '993', smtpHost: 'smtp.mail.me.com',      smtpPort: '587' },
+  'uol.com.br':     { imapHost: 'imap.uol.com.br',       imapPort: '993', smtpHost: 'smtps.uol.com.br',      smtpPort: '465' },
+  'bol.com.br':     { imapHost: 'imap.bol.com.br',       imapPort: '993', smtpHost: 'smtps.bol.com.br',      smtpPort: '465' },
+  'terra.com.br':   { imapHost: 'imap.terra.com.br',     imapPort: '993', smtpHost: 'smtp.terra.com.br',     smtpPort: '587' }
+};
+
+function resolveServerForEmail(email, custom = {}) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const domain = cleanEmail.includes('@') ? cleanEmail.split('@')[1] : '';
+  const preset = KNOWN_EMAIL_PROVIDERS[domain] || null;
+
+  const imapHost = (custom.imapHost || '').trim() || (preset ? preset.imapHost : DEFAULT_IMAP_HOST);
+  const imapPort = String((custom.imapPort || '').trim() || (preset ? preset.imapPort : DEFAULT_IMAP_PORT));
+  const smtpHost = (custom.smtpHost || '').trim() || (preset ? preset.smtpHost : (custom.imapHost ? custom.imapHost.trim() : DEFAULT_SMTP_HOST));
+  const smtpPort = String((custom.smtpPort || '').trim() || (preset ? preset.smtpPort : DEFAULT_SMTP_PORT));
+  const stripSpaces = Boolean(preset?.stripSpaces || imapHost.toLowerCase().includes('gmail.com'));
+
+  return { imapHost, imapPort, smtpHost, smtpPort, stripSpaces };
+}
 
 // Stateless Session Middleware (restores active account credentials per request)
 app.use((req, res, next) => {
@@ -148,30 +181,33 @@ app.use((req, res, next) => {
   const hdrPassB64 = req.headers['x-imap-pass'];
   if (hdrUser && hdrPassB64) {
     try {
-      const decodedPass = Buffer.from(String(hdrPassB64), 'base64').toString('utf8');
       const cleanUser = String(hdrUser).trim().toLowerCase();
-      const hdrImapHost = (req.headers['x-imap-host'] || '').trim() || DEFAULT_IMAP_HOST;
-      const hdrImapPort = (req.headers['x-imap-port'] || '').trim() || DEFAULT_IMAP_PORT;
-      const hdrSmtpHost = (req.headers['x-smtp-host'] || '').trim() || hdrImapHost || DEFAULT_SMTP_HOST;
-      const hdrSmtpPort = (req.headers['x-smtp-port'] || '').trim() || DEFAULT_SMTP_PORT;
+      const srv = resolveServerForEmail(cleanUser, {
+        imapHost: req.headers['x-imap-host'] || '',
+        imapPort: req.headers['x-imap-port'] || '',
+        smtpHost: req.headers['x-smtp-host'] || '',
+        smtpPort: req.headers['x-smtp-port'] || ''
+      });
+      let decodedPass = Buffer.from(String(hdrPassB64), 'base64').toString('utf8');
+      if (srv.stripSpaces) decodedPass = decodedPass.replace(/\s+/g, '');
 
       const changed =
         appConfig.imap.user !== cleanUser ||
         appConfig.imap.password !== decodedPass ||
-        appConfig.imap.host !== hdrImapHost ||
-        String(appConfig.imap.port) !== String(hdrImapPort) ||
-        appConfig.smtp.host !== hdrSmtpHost ||
-        String(appConfig.smtp.port) !== String(hdrSmtpPort);
+        appConfig.imap.host !== srv.imapHost ||
+        String(appConfig.imap.port) !== String(srv.imapPort) ||
+        appConfig.smtp.host !== srv.smtpHost ||
+        String(appConfig.smtp.port) !== String(srv.smtpPort);
 
       if (cleanUser && decodedPass && changed) {
         appConfig.imap.user = cleanUser;
         appConfig.imap.password = decodedPass;
-        appConfig.imap.host = hdrImapHost;
-        appConfig.imap.port = hdrImapPort;
+        appConfig.imap.host = srv.imapHost;
+        appConfig.imap.port = srv.imapPort;
         appConfig.smtp.user = cleanUser;
         appConfig.smtp.password = decodedPass;
-        appConfig.smtp.host = hdrSmtpHost;
-        appConfig.smtp.port = hdrSmtpPort;
+        appConfig.smtp.host = srv.smtpHost;
+        appConfig.smtp.port = srv.smtpPort;
         imapService.updateConfig(appConfig);
         smtpService.updateConfig(appConfig);
       }
@@ -187,16 +223,16 @@ app.post('/api/auth/verify-account', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
     let password = req.body.password || '';
-    const isGmail = email.endsWith('@gmail.com') || email.endsWith('@googlemail.com');
-    const imapHost = (req.body.imapHost || '').trim() || (isGmail ? 'imap.gmail.com' : DEFAULT_IMAP_HOST);
-    const imapPort = (req.body.imapPort || '').trim() || (isGmail ? '993' : DEFAULT_IMAP_PORT);
-    const smtpHost = (req.body.smtpHost || '').trim() || (isGmail ? 'smtp.gmail.com' : (imapHost || DEFAULT_SMTP_HOST));
-    const smtpPort = (req.body.smtpPort || '').trim() || (isGmail ? '465' : DEFAULT_SMTP_PORT);
-
-    // Google App Passwords are often copied with spaces (e.g. "abcd efgh ijkl mnop")
-    if (isGmail || imapHost.toLowerCase().includes('gmail.com')) {
+    const srv = resolveServerForEmail(email, {
+      imapHost: req.body.imapHost,
+      imapPort: req.body.imapPort,
+      smtpHost: req.body.smtpHost,
+      smtpPort: req.body.smtpPort
+    });
+    if (srv.stripSpaces) {
       password = password.replace(/\s+/g, '');
     }
+    const { imapHost, imapPort, smtpHost, smtpPort } = srv;
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Informe o e-mail e a senha da conta.' });
@@ -254,21 +290,42 @@ app.post('/api/auth/verify-account', async (req, res) => {
   }
 });
 
-// Login & Switch User Account
+// Login & Switch User Account (supports Roundcube/ServidorHH, Gmail, Outlook, Yahoo, etc.)
 app.post('/api/auth/login', async (req, res) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
-    const password = req.body.password || '';
+    let password = req.body.password || '';
     const rememberEmail = req.body.rememberEmail !== false;
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Por favor, informe o e-mail e a senha.' });
     }
 
+    const srv = resolveServerForEmail(email, {
+      imapHost: req.body.imapHost,
+      imapPort: req.body.imapPort,
+      smtpHost: req.body.smtpHost,
+      smtpPort: req.body.smtpPort
+    });
+    if (srv.stripSpaces) {
+      password = password.replace(/\s+/g, '');
+    }
+
     const tempConfig = {
       ...appConfig,
       imap: {
         ...appConfig.imap,
+        host: srv.imapHost,
+        port: srv.imapPort,
+        secure: String(srv.imapPort) === '993',
+        user: email,
+        password: password
+      },
+      smtp: {
+        ...appConfig.smtp,
+        host: srv.smtpHost,
+        port: srv.smtpPort,
+        secure: String(srv.smtpPort) === '465',
         user: email,
         password: password
       }
@@ -284,9 +341,15 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Update active credentials
+    // Update active credentials & resolved server host/port
+    appConfig.imap.host = srv.imapHost;
+    appConfig.imap.port = srv.imapPort;
+    appConfig.imap.secure = String(srv.imapPort) === '993';
     appConfig.imap.user = email;
     appConfig.imap.password = password;
+    appConfig.smtp.host = srv.smtpHost;
+    appConfig.smtp.port = srv.smtpPort;
+    appConfig.smtp.secure = String(srv.smtpPort) === '465';
     appConfig.smtp.user = email;
     appConfig.smtp.password = password;
 
@@ -320,6 +383,10 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({
       success: true,
       user: email,
+      imapHost: srv.imapHost === DEFAULT_IMAP_HOST ? '' : srv.imapHost,
+      imapPort: String(srv.imapPort) === String(DEFAULT_IMAP_PORT) ? '' : String(srv.imapPort),
+      smtpHost: srv.smtpHost === DEFAULT_SMTP_HOST ? '' : srv.smtpHost,
+      smtpPort: String(srv.smtpPort) === String(DEFAULT_SMTP_PORT) ? '' : String(srv.smtpPort),
       savedEmails: appConfig.savedEmails,
       signature: appConfig.signature
     });
