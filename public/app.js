@@ -2300,15 +2300,22 @@
         <head>
           <meta charset="utf-8">
           <style>
-            body { 
-              font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; 
-              font-size: 14px; 
-              color: #201f1e; 
-              margin: 0; 
-              padding: 16px; 
-              line-height: 1.6; 
+            body {
+              font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+              font-size: 13.5px;
+              color: #201f1e;
+              margin: 0;
+              padding: 8px 12px;
+              line-height: 1.35;
               word-break: break-word;
             }
+            p { margin: 0 0 6px 0; line-height: 1.35; }
+            p:last-child { margin-bottom: 0; }
+            div { line-height: 1.35; }
+            ul, ol { margin: 4px 0 6px 0; padding-left: 20px; }
+            li { margin-bottom: 2px; line-height: 1.35; }
+            h1, h2, h3, h4 { margin: 8px 0 4px 0; line-height: 1.25; }
+            blockquote { margin: 6px 0; padding-left: 10px; border-left: 2px solid #d1d5db; }
             a { color: #0078d4; text-decoration: underline; }
             img { max-width: 100%; height: auto; }
             table { max-width: 100%; border-collapse: collapse; }
@@ -2321,7 +2328,7 @@
       elReadBody.appendChild(iframe);
     } else {
       elReadBody.innerHTML = `
-        <div style="font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 14px; line-height: 1.6; white-space: pre-wrap; padding: 16px; color: #201f1e;">
+        <div style="font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 13.5px; line-height: 1.35; white-space: pre-wrap; padding: 10px 14px; color: #201f1e;">
           ${escapeHtml(msg.text || '(Mensagem sem conteúdo)')}
         </div>
       `;

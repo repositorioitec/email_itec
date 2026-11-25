@@ -1401,9 +1401,9 @@ body.is-resizing iframe {
 
 .reading-body {
   flex: 1;
-  padding: 24px;
+  padding: 8px 12px;
   overflow-y: auto;
-  line-height: 1.6;
+  line-height: 1.35;
 }
 
 .reading-body iframe {
