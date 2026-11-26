@@ -2085,6 +2085,7 @@
     const titleEl = document.getElementById('attPreviewTitle');
     const sizeEl = document.getElementById('attPreviewSize');
     const bodyEl = document.getElementById('attPreviewBody');
+    const btnPrint = document.getElementById('btnAttPreviewPrint');
     const btnDl = document.getElementById('btnAttPreviewDownload');
     const btnClose = document.getElementById('btnCloseAttPreview');
 
@@ -2098,6 +2099,11 @@
     if (activeAttBlobUrl) {
       URL.revokeObjectURL(activeAttBlobUrl);
       activeAttBlobUrl = null;
+    }
+
+    if (btnPrint) {
+      btnPrint.style.display = 'none';
+      btnPrint.onclick = null;
     }
 
     bodyEl.classList.remove('is-document-mode');
@@ -2153,6 +2159,81 @@
       const isAudio = effectiveBlob.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/.test(fn);
       const isHtml = /\.(html|htm)$/.test(fn) || ct === 'text/html';
       const isText = effectiveBlob.type.startsWith('text/') || /\.(txt|json|xml|log|md|ini|yml|yaml|sql|js|css|py)$/.test(fn);
+
+      // Direct print helper (prints without downloading file to disk)
+      const printViaHiddenIframe = ({ blobUrl = '', htmlDoc = '' }) => {
+        const printFrame = document.createElement('iframe');
+        printFrame.style.position = 'fixed';
+        printFrame.style.right = '0';
+        printFrame.style.bottom = '0';
+        printFrame.style.width = '0';
+        printFrame.style.height = '0';
+        printFrame.style.border = '0';
+        printFrame.style.visibility = 'hidden';
+
+        const cleanup = () => {
+          setTimeout(() => {
+            if (printFrame.parentNode) printFrame.parentNode.removeChild(printFrame);
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+          }, 1500);
+        };
+
+        printFrame.onload = () => {
+          try {
+            const win = printFrame.contentWindow;
+            if (!win) return;
+            win.onafterprint = cleanup;
+            setTimeout(() => {
+              win.focus();
+              win.print();
+            }, 250);
+          } catch (e) {
+            showToast('Não foi possível abrir a impressão direta: ' + e.message);
+            cleanup();
+          }
+        };
+
+        document.body.appendChild(printFrame);
+        if (blobUrl) {
+          printFrame.src = blobUrl;
+        } else if (htmlDoc) {
+          printFrame.srcdoc = htmlDoc;
+        }
+        // Fallback cleanup after 2 minutes if onafterprint never fires
+        setTimeout(() => {
+          if (printFrame.parentNode) printFrame.parentNode.removeChild(printFrame);
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+        }, 120000);
+      };
+
+      const isPrintable = isPdf || isImage || isCsv || isExcel || isDocx || isHtml || isText;
+      if (btnPrint && isPrintable) {
+        btnPrint.style.display = 'inline-flex';
+        btnPrint.onclick = async () => {
+          if (isPdf) {
+            const pdfUrl = URL.createObjectURL(effectiveBlob);
+            printViaHiddenIframe({ blobUrl: pdfUrl });
+          } else if (isImage) {
+            const imgUrl = URL.createObjectURL(effectiveBlob);
+            const htmlDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(att.filename || 'Imagem')}</title><style>@page{margin:10mm;}body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff;}img{max-width:100%;max-height:100vh;object-fit:contain;}</style></head><body><img src="${imgUrl}" onload="window.focus();"></body></html>`;
+            printViaHiddenIframe({ htmlDoc });
+            setTimeout(() => URL.revokeObjectURL(imgUrl), 120000);
+          } else if (isHtml) {
+            const rawHtml = await effectiveBlob.text();
+            printViaHiddenIframe({ htmlDoc: rawHtml });
+          } else if (isText) {
+            const rawText = await effectiveBlob.text();
+            const htmlDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(att.filename || 'Documento')}</title><style>@page{margin:12mm;}body{margin:0;font-family:Consolas,monospace;font-size:11pt;white-space:pre-wrap;word-break:break-word;color:#000;}</style></head><body>${escapeHtml(rawText)}</body></html>`;
+            printViaHiddenIframe({ htmlDoc });
+          } else {
+            // DOCX / Excel / CSV: print the rendered content inside the preview container
+            const clone = bodyEl.cloneNode(true);
+            clone.querySelectorAll('.att-viewer-toolbar, .att-sheet-tabs').forEach(el => el.remove());
+            const htmlDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(att.filename || 'Documento')}</title><style>@page{margin:12mm;}body{margin:0;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#201f1e;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left;}th{background:#f1f5f9;font-weight:600;}</style></head><body>${clone.innerHTML}</body></html>`;
+            printViaHiddenIframe({ htmlDoc });
+          }
+        };
+      }
 
       if (isPdf) {
         const arrayBuf = await effectiveBlob.arrayBuffer();
